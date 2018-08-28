@@ -1,15 +1,47 @@
+use std::alloc::System;
+
+#[global_allocator]
+static A: System = System;
+
 extern crate ffmpeg;
+extern crate rayon;
 
 use std::env;
+use std::{io, fs};
 use std::path::Path;
 
 use ffmpeg::{codec, filter, format, frame, media};
-use ffmpeg::{rescale, Rescale};
+use rayon::prelude::*;
+
+#[derive(Debug)]
+enum Error {
+    Io(io::Error),
+    Ffmpeg(ffmpeg::Error),
+    String(String),
+}
+
+impl From<ffmpeg::Error> for Error {
+    fn from(v: ffmpeg::Error) -> Error {
+        Error::Ffmpeg(v)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(v: io::Error) -> Error {
+        Error::Io(v)
+    }
+}
+
+impl From<String> for Error {
+    fn from(v: String) -> Error {
+        Error::String(v)
+    }
+}
 
 fn filter(
     decoder: &codec::decoder::Audio,
     encoder: &codec::encoder::Audio,
-) -> Result<filter::Graph, ffmpeg::Error> {
+) -> Result<filter::Graph, Error> {
     let mut filter = filter::Graph::new();
 
     let args = format!(
@@ -34,8 +66,6 @@ fn filter(
     filter.output("in", 0)?.input("out", 0)?.parse("anull")?;
     filter.validate()?;
 
-    println!("{}", filter.dump());
-
     if let Some(codec) = encoder.codec() {
         if !codec
             .capabilities()
@@ -59,17 +89,17 @@ struct Transcoder {
     encoder: codec::encoder::Audio,
 }
 
-fn transcoder<P: AsRef<Path>>(
+fn transcoder(
     ictx: &mut format::context::Input,
     octx: &mut format::context::Output,
-    path: &P,
-) -> Result<Transcoder, ffmpeg::Error> {
+) -> Result<Transcoder, Error> {
     let input = ictx
         .streams()
         .best(media::Type::Audio)
         .expect("could not find best audio stream");
     let mut decoder = input.codec().decoder().audio()?;
-    let codec = ffmpeg::encoder::find(octx.format().codec(path, media::Type::Audio))
+
+    let codec = ffmpeg::encoder::find(octx.format().codec(&"", media::Type::Audio))
         .expect("failed to find encoder")
         .audio()?;
     let global = octx
@@ -105,7 +135,10 @@ fn transcoder<P: AsRef<Path>>(
     encoder.set_time_base((1, 48_000));
     output.set_time_base((1, 48_000));
 
-    let encoder = encoder.open_as(codec)?;
+    let mut encode_dict = ffmpeg::Dictionary::new();
+    encode_dict.set("vbr", "on");
+    encoder.set_bit_rate(64_000);
+    let encoder = encoder.open_as_with(codec, encode_dict)?;
     output.set_parameters(&encoder);
 
     let filter = filter(&decoder, &encoder)?;
@@ -118,15 +151,12 @@ fn transcoder<P: AsRef<Path>>(
     })
 }
 
-fn main() -> Result<(), ffmpeg::Error> {
-    ffmpeg::init()?;
-
-    let input = env::args().nth(1).expect("missing input");
-    let output = env::args().nth(2).expect("missing output");
-
+fn transcode(input: &Path, output: &Path) -> Result<(), Error> {
     let mut ictx = format::input(&input)?;
-    let mut octx = format::output(&output)?;
-    let mut transcoder = transcoder(&mut ictx, &mut octx, &output)?;
+    let original_extension = output.extension().expect("file without extension").to_string_lossy();
+    let output_tmp = output.with_extension("tmp");
+    let mut octx = format::output_as(&output_tmp, &original_extension)?;
+    let mut transcoder = transcoder(&mut ictx, &mut octx)?;
 
     octx.set_metadata(ictx.metadata().to_owned());
     octx.write_header()?;
@@ -182,5 +212,57 @@ fn main() -> Result<(), ffmpeg::Error> {
     }
 
     octx.write_trailer()?;
+
+    fs::rename(output_tmp, output)?;
+
+    Ok(())
+}
+
+fn transcode_path(input: &Path, output: &Path) -> Result<(), Error> {
+    input.read_dir()?.par_bridge().try_for_each(|entry| {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let new_input = input.join(entry.file_name());
+        let mut new_output = output.join(entry.file_name());
+        if file_type.is_dir() {
+            transcode_path(new_input.as_ref(), new_output.as_ref())?;
+        } else if file_type.is_file() {
+            if entry.path().extension().unwrap() != "flac" {
+                println!("not flac input: {:?}", entry.path());
+                return Ok(());
+            }
+            fs::create_dir_all(&output)?;
+            new_output.set_extension("opus");
+            let in_mtime = new_input.metadata()?.modified()?;
+            let out_mtime = new_output.metadata().and_then(|md| md.modified());
+            match out_mtime {
+                Ok(out_mtime) => {
+                    if out_mtime < in_mtime {
+                        transcode(new_input.as_ref(), new_output.as_ref())?;
+                    }
+                }
+                Err(e) => {
+                    if e.kind() == io::ErrorKind::NotFound {
+                        transcode(new_input.as_ref(), new_output.as_ref())?;
+                    } else {
+                        return Err(e.into());
+                    }
+
+                }
+            }
+        } else {
+            Err(format!("Unsupported file type `{:?}` (maybe symlink?)", new_input))?;
+        }
+        Ok(())
+    })
+}
+
+fn main() -> Result<(), Error> {
+    ffmpeg::init()?;
+
+    let input = env::args().nth(1).expect("missing input");
+    let output = env::args().nth(2).expect("missing output");
+    transcode_path(input.as_ref(), output.as_ref())?;
+
     Ok(())
 }

@@ -5,3 +5,4 @@ authors = ["Thomas Heck <t@b128.net>"]
 
 [dependencies]
 ffmpeg = { git = "https://github.com/hecke-rs/rust-ffmpeg" }
+rayon = "1.0.2"
