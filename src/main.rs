@@ -101,11 +101,9 @@ fn transcoder<P: AsRef<Path>>(
             .next()
             .unwrap(),
     );
-    encoder.set_bit_rate(decoder.bit_rate());
-    encoder.set_max_bit_rate(decoder.max_bit_rate());
 
-    encoder.set_time_base((1, decoder.rate() as i32));
-    output.set_time_base((1, decoder.rate() as i32));
+    encoder.set_time_base((1, 48_000));
+    output.set_time_base((1, 48_000));
 
     let encoder = encoder.open_as(codec)?;
     output.set_parameters(&encoder);
@@ -120,17 +118,6 @@ fn transcoder<P: AsRef<Path>>(
     })
 }
 
-// Transcode the `best` audio stream of the input file into a the output file while applying a
-// given filter. If no filter was specified the stream gets copied (`anull` filter).
-//
-// Example 1: Transcode *.mp3 file to *.wmv while speeding it up
-// transcode-audio in.mp3 out.wmv "atempo=1.2"
-//
-// Example 2: Overlay an audio file
-// transcode-audio in.mp3 out.mp3 "amovie=overlay.mp3 [ov]; [in][ov] amerge [out]"
-//
-// Example 3: Seek to a specified position (in seconds)
-// transcode-audio in.mp3 out.mp3 anull 30
 fn main() -> Result<(), ffmpeg::Error> {
     ffmpeg::init()?;
 
@@ -145,38 +132,30 @@ fn main() -> Result<(), ffmpeg::Error> {
     octx.write_header()?;
 
     let in_time_base = transcoder.decoder.time_base();
-    let out_time_base = octx.stream(0).unwrap().time_base();
 
-    let mut decoded = frame::Audio::empty();
+    let mut frame = frame::Audio::empty();
     let mut encoded = ffmpeg::Packet::empty();
 
     for (stream, mut packet) in ictx.packets() {
-        if stream.index() == transcoder.stream {
-            packet.rescale_ts(stream.time_base(), in_time_base);
+        if stream.index() != transcoder.stream {
+            continue;
+        }
 
-            if let Ok(true) = transcoder.decoder.decode(&packet, &mut decoded) {
-                // let timestamp = decoded.timestamp();
-                // decoded.set_pts(timestamp);
+        packet.rescale_ts(stream.time_base(), in_time_base);
 
-                transcoder
-                    .filter
-                    .get("in")
-                    .unwrap()
-                    .source()
-                    .add(&decoded)?;
+        if let Ok(true) = transcoder.decoder.decode(&packet, &mut frame) {
+            transcoder.filter.get("in").unwrap().source().add(&frame)?;
 
-                while let Ok(..) = transcoder
-                    .filter
-                    .get("out")
-                    .unwrap()
-                    .sink()
-                    .frame(&mut decoded)
-                {
-                    if let Ok(true) = transcoder.encoder.encode(&decoded, &mut encoded) {
-                        encoded.set_stream(0);
-                        encoded.rescale_ts(in_time_base, out_time_base);
-                        encoded.write_interleaved(&mut octx)?;
-                    }
+            while let Ok(..) = transcoder
+                .filter
+                .get("out")
+                .unwrap()
+                .sink()
+                .frame(&mut frame)
+            {
+                if let Ok(true) = transcoder.encoder.encode(&frame, &mut encoded) {
+                    encoded.set_stream(0);
+                    encoded.write_interleaved(&mut octx)?;
                 }
             }
         }
@@ -189,18 +168,16 @@ fn main() -> Result<(), ffmpeg::Error> {
         .get("out")
         .unwrap()
         .sink()
-        .frame(&mut decoded)
+        .frame(&mut frame)
     {
-        if let Ok(true) = transcoder.encoder.encode(&decoded, &mut encoded) {
+        if let Ok(true) = transcoder.encoder.encode(&frame, &mut encoded) {
             encoded.set_stream(0);
-            encoded.rescale_ts(in_time_base, out_time_base);
             encoded.write_interleaved(&mut octx)?;
         }
     }
 
     if let Ok(true) = transcoder.encoder.flush(&mut encoded) {
         encoded.set_stream(0);
-        encoded.rescale_ts(in_time_base, out_time_base);
         encoded.write_interleaved(&mut octx)?;
     }
 
