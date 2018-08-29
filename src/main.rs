@@ -7,8 +7,8 @@ extern crate ffmpeg;
 extern crate rayon;
 
 use std::env;
-use std::{io, fs};
 use std::path::Path;
+use std::{fs, io};
 
 use ffmpeg::{codec, filter, format, frame, media};
 use rayon::prelude::*;
@@ -153,7 +153,10 @@ fn transcoder(
 
 fn transcode(input: &Path, output: &Path) -> Result<(), Error> {
     let mut ictx = format::input(&input)?;
-    let original_extension = output.extension().expect("file without extension").to_string_lossy();
+    let original_extension = output
+        .extension()
+        .expect("file without extension")
+        .to_string_lossy();
     let output_tmp = output.with_extension("tmp");
     let mut octx = format::output_as(&output_tmp, &original_extension)?;
     let mut transcoder = transcoder(&mut ictx, &mut octx)?;
@@ -186,6 +189,9 @@ fn transcode(input: &Path, output: &Path) -> Result<(), Error> {
                 if let Ok(true) = transcoder.encoder.encode(&frame, &mut encoded) {
                     encoded.set_stream(0);
                     encoded.write_interleaved(&mut octx)?;
+                }
+                unsafe {
+                    ffmpeg::ffi::av_frame_unref(frame.as_mut_ptr());
                 }
             }
         }
@@ -228,7 +234,7 @@ fn transcode_path(input: &Path, output: &Path) -> Result<(), Error> {
             transcode_path(new_input.as_ref(), new_output.as_ref())?;
         } else if file_type.is_file() {
             if entry.path().extension().unwrap() != "flac" {
-                println!("not flac input: {:?}", entry.path());
+                // println!("not flac input: {:?}", entry.path());
                 return Ok(());
             }
             fs::create_dir_all(&output)?;
@@ -247,11 +253,13 @@ fn transcode_path(input: &Path, output: &Path) -> Result<(), Error> {
                     } else {
                         return Err(e.into());
                     }
-
                 }
             }
         } else {
-            Err(format!("Unsupported file type `{:?}` (maybe symlink?)", new_input))?;
+            Err(format!(
+                "Unsupported file type `{:?}` (maybe symlink?)",
+                new_input
+            ))?;
         }
         Ok(())
     })
