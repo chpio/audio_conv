@@ -18,6 +18,7 @@ enum Error {
     Io(io::Error),
     Ffmpeg(ffmpeg::Error),
     String(String),
+    Str(&'static str),
 }
 
 impl From<ffmpeg::Error> for Error {
@@ -35,6 +36,12 @@ impl From<io::Error> for Error {
 impl From<String> for Error {
     fn from(v: String) -> Error {
         Error::String(v)
+    }
+}
+
+impl From<&'static str> for Error {
+    fn from(v: &'static str) -> Error {
+        Error::Str(v)
     }
 }
 
