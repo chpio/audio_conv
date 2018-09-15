@@ -1,17 +1,16 @@
-use std::alloc::System;
-
-#[global_allocator]
-static A: System = System;
-
 extern crate ffmpeg;
 extern crate rayon;
 
+use std::alloc;
 use std::env;
 use std::path::Path;
 use std::{fs, io};
 
 use ffmpeg::{codec, filter, format, frame, media};
 use rayon::prelude::*;
+
+#[global_allocator]
+static ALLOCATOR: alloc::System = alloc::System;
 
 #[derive(Debug)]
 enum Error {
@@ -152,9 +151,9 @@ fn transcoder(
 
     Ok(Transcoder {
         stream: input.index(),
-        filter: filter,
-        decoder: decoder,
-        encoder: encoder,
+        filter,
+        decoder,
+        encoder,
     })
 }
 
