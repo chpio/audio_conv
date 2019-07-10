@@ -1,13 +1,9 @@
-use std::alloc;
 use std::env;
 use std::path::Path;
 use std::{fs, io};
 
 use ffmpeg_next::{self as ffmpeg, codec, filter, format, frame, media};
 use rayon::prelude::*;
-
-#[global_allocator]
-static ALLOCATOR: alloc::System = alloc::System;
 
 #[derive(Debug)]
 enum Error {
