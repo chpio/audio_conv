@@ -136,7 +136,7 @@ fn transcoder(
 
     let mut encode_dict = ffmpeg::Dictionary::new();
     encode_dict.set("vbr", "on");
-    encoder.set_bit_rate(64_000);
+    encoder.set_bit_rate(192_000);
     let encoder = encoder.open_as_with(codec, encode_dict)?;
     output.set_parameters(&encoder);
 
