@@ -1,12 +1,9 @@
-extern crate ffmpeg;
-extern crate rayon;
-
 use std::alloc;
 use std::env;
 use std::path::Path;
 use std::{fs, io};
 
-use ffmpeg::{codec, filter, format, frame, media};
+use ffmpeg_next::{self as ffmpeg, codec, filter, format, frame, media};
 use rayon::prelude::*;
 
 #[global_allocator]

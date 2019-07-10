@@ -2,7 +2,8 @@
 name = "audio_conv"
 version = "0.0.0"
 authors = ["Thomas Heck <t@b128.net>"]
+edition = "2018"
 
 [dependencies]
-ffmpeg = { git = "https://github.com/hecke-rs/rust-ffmpeg" }
+ffmpeg-next = { path = "../rust-ffmpeg" }
 rayon = "1.0.2"
