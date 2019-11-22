@@ -2,7 +2,7 @@ use std::env;
 use std::path::Path;
 use std::{fs, io};
 
-use ffmpeg_next::{self as ffmpeg, codec, filter, format, frame, media};
+use stainless_ffmpeg::{self as ffmpeg, codec, filter, format, frame, media};
 use rayon::prelude::*;
 
 #[derive(Debug)]
@@ -13,7 +13,7 @@ enum Error {
     Str(&'static str),
 }
 
-impl From<ffmpeg::Error> for Error {
+impl From<ffmpeg::error::Error> for Error {
     fn from(v: ffmpeg::Error) -> Error {
         Error::Ffmpeg(v)
     }
@@ -151,6 +151,8 @@ fn transcoder(
 }
 
 fn transcode(input: &Path, output: &Path) -> Result<(), Error> {
+    println!("{:?}", output);
+
     let mut ictx = format::input(&input)?;
     let original_extension = output
         .extension()
