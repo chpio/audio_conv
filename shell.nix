@@ -9,6 +9,7 @@ stdenv.mkDerivation {
         clang
         cargo
         rustc
+        rls
     ];
     LIBCLANG_PATH="${llvmPackages.libclang}/lib";
 }
