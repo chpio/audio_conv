@@ -6,10 +6,12 @@ use gstreamer_audio::{prelude::*, AudioDecoder, AudioEncoder};
 use gstreamer_base::prelude::*;
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
+use std::io::Error as StdIoError;
 
 #[derive(Debug)]
 enum Error {
     Str(Cow<'static, str>),
+    StdIoError(StdIoError),
     GBoolError(GBoolError),
     GError(GError),
 }
@@ -29,6 +31,12 @@ impl From<&'static str> for Error {
 impl From<GBoolError> for Error {
     fn from(err: GBoolError) -> Error {
         Error::GBoolError(err)
+    }
+}
+
+impl From<StdIoError> for Error {
+    fn from(err: StdIoError) -> Error {
+        Error::StdIoError(err)
     }
 }
 
@@ -117,8 +125,11 @@ async fn transcode(src: &Path, dest: &Path) -> Result<(), Error> {
     let src_gstring = glib::GString::ForeignOwned(Some(src_cstring));
     file_src.set_property("location", &src_gstring)?;
 
+    let original_dest = dest;
+    let dest = dest.with_extension("tmp");
+
     let file_dest: gstreamer_base::BaseSink = gmake("filesink")?;
-    let dest_cstring = ToGlibPtr::<*const libc::c_char>::to_glib_none(dest).1;
+    let dest_cstring = ToGlibPtr::<*const libc::c_char>::to_glib_none(&dest).1;
     let dest_gstring = glib::GString::ForeignOwned(Some(dest_cstring));
     file_dest.set_property("location", &dest_gstring)?;
     file_dest.set_sync(false);
@@ -174,6 +185,8 @@ async fn transcode(src: &Path, dest: &Path) -> Result<(), Error> {
     pipeline
         .set_state(gstreamer::State::Null)
         .map_err(|_| "Unable to set the pipeline to the `Null` state")?;
+
+    std::fs::rename(dest, original_dest)?;
 
     Ok(())
 }
