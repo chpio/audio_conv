@@ -180,10 +180,10 @@ async fn transcode(src: &Path, dest: &Path) -> Result<(), Error> {
             }
         })
         .take_while(|e| {
-            if let Ok(true) = e {
-                futures::future::ready(true)
-            } else {
+            if let Ok(false) = e {
                 futures::future::ready(false)
+            } else {
+                futures::future::ready(true)
             }
         })
         .try_for_each(|_| futures::future::ready(Ok(())))
