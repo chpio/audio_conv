@@ -138,6 +138,10 @@ async fn transcode(src: &Path, dest: &Path) -> Result<(), Error> {
     file_dest.set_property("location", &tmp_dest_gstring)?;
     file_dest.set_sync(false);
 
+    let resample: Element = gmake("audioresample")?;
+    // quality from 0 to 10
+    resample.set_property("quality", &7)?;
+
     let encoder: AudioEncoder = gmake("opusenc")?;
     encoder.set_property("bitrate", &160_000)?;
     // 0 = cbr; 1 = vbr
@@ -147,7 +151,9 @@ async fn transcode(src: &Path, dest: &Path) -> Result<(), Error> {
         file_src.upcast_ref(),
         &gmake("flacparse")?,
         &gmake("flacdec")?,
-        &gmake("audioresample")?,
+        &resample,
+        // `audioconvert` converts the bitdepth
+        &gmake("audioconvert")?,
         encoder.upcast_ref(),
         &gmake("oggmux")?,
         file_dest.upcast_ref(),
