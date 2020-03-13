@@ -1,59 +1,19 @@
+use anyhow::{Context, Result};
 use futures::prelude::*;
-use glib::error::{BoolError as GBoolError, Error as GError};
 use glib::translate::ToGlibPtr;
 use gstreamer::Element;
 use gstreamer_audio::{prelude::*, AudioEncoder};
 use gstreamer_base::prelude::*;
-use std::borrow::Cow;
-use std::io::Error as StdIoError;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug)]
-enum Error {
-    Str(Cow<'static, str>),
-    StdIoError(StdIoError),
-    GBoolError(GBoolError),
-    GError(GError),
-}
-
-impl From<String> for Error {
-    fn from(err: String) -> Error {
-        Error::Str(err.into())
-    }
-}
-
-impl From<&'static str> for Error {
-    fn from(err: &'static str) -> Error {
-        Error::Str(err.into())
-    }
-}
-
-impl From<GBoolError> for Error {
-    fn from(err: GBoolError) -> Error {
-        Error::GBoolError(err)
-    }
-}
-
-impl From<StdIoError> for Error {
-    fn from(err: StdIoError) -> Error {
-        Error::StdIoError(err)
-    }
-}
-
-impl From<GError> for Error {
-    fn from(err: GError) -> Error {
-        Error::GError(err)
-    }
-}
-
-fn gmake<T: IsA<Element>>(factory_name: &str) -> Result<T, Error> {
+fn gmake<T: IsA<Element>>(factory_name: &str) -> Result<T> {
     let res = gstreamer::ElementFactory::make(factory_name, None)
-        // TODO: passthrough err source
-        .map_err(|_| format!("could not make \"{}\"", factory_name))?
+        .with_context(|| format!("could not make {}", factory_name))?
         .downcast()
-        .map_err(|_| {
+        .ok()
+        .with_context(|| {
             format!(
-                "could not cast \"{}\" into `{}`",
+                "could not cast {} into `{}`",
                 factory_name,
                 std::any::type_name::<T>()
             )
@@ -89,7 +49,7 @@ fn get_paths(input: PathBuf, output: PathBuf) -> impl Iterator<Item = (PathBuf, 
         .map(|(e, out)| (e.into_path(), out))
 }
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<()> {
     gstreamer::init()?;
     let ctx = glib::MainContext::default();
     ctx.push_thread_default();
@@ -104,12 +64,7 @@ fn main() -> Result<(), Error> {
     let f = futures::stream::iter(it)
         .for_each_concurrent(num_cpus::get(), |(src, dest)| async move {
             if let Err(err) = transcode(src.as_path(), dest.as_path()).await {
-                println!(
-                    "err \"{}\" => \"{}\": {:?}",
-                    src.to_string_lossy(),
-                    dest.to_string_lossy(),
-                    err
-                );
+                println!("err {} => {}:\n{:?}", src.display(), dest.display(), err);
             }
         })
         .then(move |_| {
@@ -123,7 +78,7 @@ fn main() -> Result<(), Error> {
     Ok(())
 }
 
-async fn transcode(src: &Path, dest: &Path) -> Result<(), Error> {
+async fn transcode(src: &Path, dest: &Path) -> Result<()> {
     let file_src: gstreamer_base::BaseSrc = gmake("filesrc")?;
     let src_cstring = ToGlibPtr::<*const libc::c_char>::to_glib_none(src).1;
     let src_gstring = glib::GString::ForeignOwned(Some(src_cstring));
@@ -164,16 +119,16 @@ async fn transcode(src: &Path, dest: &Path) -> Result<(), Error> {
 
     Element::link_many(elems)?;
 
-    let bus = pipeline.get_bus().ok_or("pipe get bus")?;
+    let bus = pipeline.get_bus().context("pipe get bus")?;
 
     std::fs::create_dir_all(
         dest.parent()
-            .ok_or_else(|| format!("could not get parent dir for {}", dest.to_string_lossy()))?,
+            .with_context(|| format!("could not get parent dir for {}", dest.display()))?,
     )?;
 
     pipeline
         .set_state(gstreamer::State::Playing)
-        .map_err(|_| "Unable to set the pipeline to the `Playing` state")?;
+        .context("Unable to set the pipeline to the `Playing` state")?;
 
     gstreamer::BusStream::new(&bus)
         .map(|msg| {
@@ -197,7 +152,7 @@ async fn transcode(src: &Path, dest: &Path) -> Result<(), Error> {
 
     pipeline
         .set_state(gstreamer::State::Null)
-        .map_err(|_| "Unable to set the pipeline to the `Null` state")?;
+        .context("Unable to set the pipeline to the `Null` state")?;
 
     std::fs::rename(tmp_dest, dest)?;
 
