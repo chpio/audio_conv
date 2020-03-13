@@ -21,7 +21,7 @@ fn gmake<T: IsA<Element>>(factory_name: &str) -> Result<T> {
     Ok(res)
 }
 
-fn get_paths(input: PathBuf, output: PathBuf) -> impl Iterator<Item = (PathBuf, PathBuf)> {
+fn get_path_pairs(input: PathBuf, output: PathBuf) -> impl Iterator<Item = (PathBuf, PathBuf)> {
     walkdir::WalkDir::new(input.as_path())
         .into_iter()
         .filter_map(|e| e.ok())
@@ -51,30 +51,18 @@ fn get_paths(input: PathBuf, output: PathBuf) -> impl Iterator<Item = (PathBuf, 
 
 fn main() -> Result<()> {
     gstreamer::init()?;
-    let ctx = glib::MainContext::default();
-    ctx.push_thread_default();
-    let glib_loop = glib::MainLoop::new(Some(&ctx), false);
-
     let input = std::env::args().nth(1).expect("missing input");
     let output = std::env::args().nth(2).expect("missing output");
-
-    let it = get_paths(input.into(), output.into());
-
-    let glib_loop_clone = glib_loop.clone();
-    let f = futures::stream::iter(it)
-        .for_each_concurrent(num_cpus::get(), |(src, dest)| async move {
-            if let Err(err) = transcode(src.as_path(), dest.as_path()).await {
-                println!("err {} => {}:\n{:?}", src.display(), dest.display(), err);
-            }
-        })
-        .then(move |_| {
-            // we're done, kill the loop
-            glib_loop_clone.quit();
-            futures::future::ready(())
-        });
-    ctx.spawn_local(f);
-    glib_loop.run();
-    ctx.pop_thread_default();
+    futures::executor::block_on(
+        futures::stream::iter(get_path_pairs(input.into(), output.into())).for_each_concurrent(
+            num_cpus::get(),
+            |(src, dest)| async move {
+                if let Err(err) = transcode(src.as_path(), dest.as_path()).await {
+                    println!("err {} => {}:\n{:?}", src.display(), dest.display(), err);
+                }
+            },
+        ),
+    );
     Ok(())
 }
 
