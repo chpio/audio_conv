@@ -51,8 +51,8 @@ fn get_path_pairs(input: PathBuf, output: PathBuf) -> impl Iterator<Item = (Path
 
 fn main() -> Result<()> {
     gstreamer::init()?;
-    let input = std::env::args().nth(1).expect("missing input");
-    let output = std::env::args().nth(2).expect("missing output");
+    let input = std::env::args().nth(1).context("missing input")?;
+    let output = std::env::args().nth(2).context("missing output")?;
     futures::executor::block_on(
         futures::stream::iter(get_path_pairs(input.into(), output.into())).for_each_concurrent(
             num_cpus::get(),
