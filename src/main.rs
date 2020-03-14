@@ -95,7 +95,7 @@ async fn transcode(src: &Path, dest: &Path) -> Result<()> {
         &gmake("flacparse")?,
         &gmake("flacdec")?,
         &resample,
-        // `audioconvert` converts the bitdepth
+        // `audioconvert` converts audio format, bitdepth, ...
         &gmake("audioconvert")?,
         encoder.upcast_ref(),
         &gmake("oggmux")?,
@@ -114,35 +114,54 @@ async fn transcode(src: &Path, dest: &Path) -> Result<()> {
             .with_context(|| format!("could not get parent dir for {}", dest.display()))?,
     )?;
 
-    pipeline
-        .set_state(gstreamer::State::Playing)
-        .context("Unable to set the pipeline to the `Playing` state")?;
+    rm_file_on_err(&tmp_dest, async {
+        pipeline
+            .set_state(gstreamer::State::Playing)
+            .context("Unable to set the pipeline to the `Playing` state")?;
 
-    gstreamer::BusStream::new(&bus)
-        .map(|msg| {
-            use gstreamer::MessageView;
+        gstreamer::BusStream::new(&bus)
+            .map(|msg| {
+                use gstreamer::MessageView;
 
-            match msg.view() {
-                MessageView::Eos(..) => Ok(false),
-                MessageView::Error(err) => Err(err.get_error()),
-                _ => Ok(true),
-            }
-        })
-        .take_while(|e| {
-            if let Ok(false) = e {
-                futures::future::ready(false)
-            } else {
-                futures::future::ready(true)
-            }
-        })
-        .try_for_each(|_| futures::future::ready(Ok(())))
-        .await?;
+                match msg.view() {
+                    MessageView::Eos(..) => Ok(false),
+                    MessageView::Error(err) => Err(err.get_error()),
+                    _ => Ok(true),
+                }
+            })
+            .take_while(|e| {
+                if let Ok(false) = e {
+                    futures::future::ready(false)
+                } else {
+                    futures::future::ready(true)
+                }
+            })
+            .try_for_each(|_| futures::future::ready(Ok(())))
+            .await?;
 
-    pipeline
-        .set_state(gstreamer::State::Null)
-        .context("Unable to set the pipeline to the `Null` state")?;
+        pipeline
+            .set_state(gstreamer::State::Null)
+            .context("Unable to set the pipeline to the `Null` state")?;
 
-    std::fs::rename(tmp_dest, dest)?;
+        std::fs::rename(&tmp_dest, dest)?;
 
-    Ok(())
+        Ok(())
+    })
+    .await
+}
+
+async fn rm_file_on_err<F, T>(path: &Path, f: F) -> F::Output
+where
+    F: Future<Output = Result<T>>,
+{
+    match f.await {
+        Err(err) => match std::fs::remove_file(path) {
+            Ok(..) => Err(err),
+            Err(rm_err) if rm_err.kind() == std::io::ErrorKind::NotFound => Err(err),
+            Err(rm_err) => Err(rm_err)
+                .context(format!("removing {}", path.display()))
+                .context(err),
+        },
+        res @ Ok(..) => res,
+    }
 }
