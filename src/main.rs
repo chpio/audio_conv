@@ -124,6 +124,8 @@ async fn transcode(src: &Path, dest: &Path) -> Result<()> {
                 use gstreamer::MessageView;
 
                 match msg.view() {
+                    // we need to actively stop pulling the stream, that's because stream will
+                    // never end despite yielding an `Eos` message
                     MessageView::Eos(..) => Ok(false),
                     MessageView::Error(err) => Err(err.get_error()),
                     _ => Ok(true),
