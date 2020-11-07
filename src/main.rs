@@ -1,10 +1,13 @@
 use anyhow::{Context, Result};
 use futures::prelude::*;
-use glib::translate::ToGlibPtr;
+use glib::GString;
 use gstreamer::Element;
 use gstreamer_audio::{prelude::*, AudioEncoder};
 use gstreamer_base::prelude::*;
-use std::path::{Path, PathBuf};
+use std::{
+    ffi,
+    path::{Path, PathBuf},
+};
 
 fn gmake<T: IsA<Element>>(factory_name: &str) -> Result<T> {
     let res = gstreamer::ElementFactory::make(factory_name, None)
@@ -68,17 +71,13 @@ fn main() -> Result<()> {
 
 async fn transcode(src: &Path, dest: &Path) -> Result<()> {
     let file_src: gstreamer_base::BaseSrc = gmake("filesrc")?;
-    let src_cstring = ToGlibPtr::<*const libc::c_char>::to_glib_none(src).1;
-    let src_gstring = glib::GString::ForeignOwned(Some(src_cstring));
-    file_src.set_property("location", &src_gstring)?;
+    file_src.set_property("location", &path_to_gstring(src))?;
 
     // encode into a tmp file first, then rename to actuall file name, that way we're writing
     // "whole" files to the intended file path, ignoring partial files in the mtime check
     let tmp_dest = dest.with_extension("tmp");
     let file_dest: gstreamer_base::BaseSink = gmake("filesink")?;
-    let tmp_dest_cstring = ToGlibPtr::<*const libc::c_char>::to_glib_none(&tmp_dest).1;
-    let tmp_dest_gstring = glib::GString::ForeignOwned(Some(tmp_dest_cstring));
-    file_dest.set_property("location", &tmp_dest_gstring)?;
+    file_dest.set_property("location", &path_to_gstring(&tmp_dest))?;
     file_dest.set_sync(false);
 
     let resample: Element = gmake("audioresample")?;
@@ -119,7 +118,7 @@ async fn transcode(src: &Path, dest: &Path) -> Result<()> {
             .set_state(gstreamer::State::Playing)
             .context("Unable to set the pipeline to the `Playing` state")?;
 
-        gstreamer::BusStream::new(&bus)
+        bus.stream()
             .map(|msg| {
                 use gstreamer::MessageView;
 
@@ -166,4 +165,34 @@ where
         },
         res @ Ok(..) => res,
     }
+}
+
+fn path_to_gstring(path: &Path) -> GString {
+    let buf = {
+        let mut buf = Vec::<u8>::new();
+
+        // https://stackoverflow.com/a/59224987/5572146
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            buf.extend(path.as_os_str().as_bytes());
+        }
+
+        #[cfg(windows)]
+        {
+            // NOT TESTED
+            // FIXME: test and post answer to https://stackoverflow.com/questions/38948669
+            use std::os::windows::ffi::OsStrExt;
+            buf.extend(
+                path.as_os_str()
+                    .encode_wide()
+                    .map(|char| char.to_ne_bytes())
+                    .flatten(),
+            );
+        }
+
+        buf
+    };
+
+    ffi::CString::new(buf).unwrap().into()
 }

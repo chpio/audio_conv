@@ -5,10 +5,10 @@ authors = ["Thomas Heck <t@b128.net>"]
 edition = "2018"
 
 [dependencies]
-gstreamer-audio = "0.15"
-gstreamer = "0.15"
-gstreamer-base = "0.15"
-glib = "0.9"
+gstreamer-audio = "0.16"
+gstreamer = "0.16"
+gstreamer-base = "0.16"
+glib = "0.10"
 futures = "0.3"
 num_cpus = "1"
 walkdir = "2"
