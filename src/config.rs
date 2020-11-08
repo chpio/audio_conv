@@ -55,6 +55,10 @@ pub fn config() -> Result<Config> {
         .unwrap_or_else(|| AsRef::<Path>::as_ref("audio-conv.yaml"));
     let config_path = current_dir.join(config_path);
 
+    let config_dir = config_path
+        .parent()
+        .context("could not get parent directory of the config file")?;
+
     let config_file = load_config_file(&config_path)
         .with_context(|| format!("failed loading config file \"{}\"", config_path.display()))?;
 
@@ -66,28 +70,34 @@ pub fn config() -> Result<Config> {
     }
 
     Ok(Config {
-        from: matches
-            .value_of_os("from")
-            .map(AsRef::<Path>::as_ref)
-            .or_else(|| {
-                config_file
-                    .as_ref()
-                    .map(|c| c.from.as_ref().map(AsRef::as_ref))
-                    .flatten()
-            })
-            .map(|p| current_dir.join(p))
-            .ok_or_else(|| Error::msg("\"from\" not configured"))?,
+        from: {
+            matches
+                .value_of_os("from")
+                .map(|p| current_dir.join(p))
+                .or_else(|| {
+                    config_file
+                        .as_ref()
+                        .map(|c| c.from.as_ref())
+                        .flatten()
+                        .map(|p| config_dir.join(p))
+                })
+                .ok_or_else(|| Error::msg("\"from\" not configured"))?
+                .canonicalize()
+                .context("could not canonicalize \"from\" path")?
+        },
         to: matches
             .value_of_os("to")
-            .map(AsRef::<Path>::as_ref)
+            .map(|p| current_dir.join(p))
             .or_else(|| {
                 config_file
                     .as_ref()
-                    .map(|c| c.to.as_ref().map(AsRef::as_ref))
+                    .map(|c| c.to.as_ref())
                     .flatten()
+                    .map(|p| config_dir.join(p))
             })
-            .map(|p| current_dir.join(p))
-            .ok_or_else(|| Error::msg("\"to\" not configured"))?,
+            .ok_or_else(|| Error::msg("\"to\" not configured"))?
+            .canonicalize()
+            .context("could not canonicalize \"to\" path")?,
     })
 }
 
