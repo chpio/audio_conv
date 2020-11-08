@@ -1,3 +1,5 @@
+mod config;
+
 use anyhow::{Context, Result};
 use futures::{channel::mpsc, prelude::*};
 use glib::GString;
@@ -54,14 +56,13 @@ fn get_path_pairs(input: PathBuf, output: PathBuf) -> impl Iterator<Item = (Path
 
 fn main() -> Result<()> {
     gstreamer::init()?;
-    let input = std::env::args().nth(1).context("missing input")?;
-    let output = std::env::args().nth(2).context("missing output")?;
+    let config = config::config().context("could not get the config")?;
 
     let (pair_tx, pair_rx) = mpsc::channel(16);
 
     // move blocking directory reading to an external thread
     let pair_producer = std::thread::spawn(|| {
-        let produce_pairs = futures::stream::iter(get_path_pairs(input.into(), output.into()))
+        let produce_pairs = futures::stream::iter(get_path_pairs(config.from, config.to))
             .map(Ok)
             .forward(pair_tx)
             .map(|res| res.context("sending path pairs failed"));
