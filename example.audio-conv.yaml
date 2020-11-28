@@ -1,0 +1,8 @@
+from: ./music
+to: ./converted_test
+matches:
+  - regex: \.flac$
+    to:
+      codec: opus
+      bitrate: 160
+      bitrate_type: vbr

@@ -1,23 +1,86 @@
 use anyhow::{Context, Error, Result};
-use serde::{Deserialize, Serialize};
+use regex::bytes::{Regex, RegexBuilder};
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Config {
     pub from: PathBuf,
     pub to: PathBuf,
+    pub matches: Vec<TranscodeMatch>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
+pub struct TranscodeMatch {
+    pub regex: Regex,
+    pub to: Transcode,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "codec")]
+pub enum Transcode {
+    #[serde(rename = "opus")]
+    Opus {
+        #[serde(default = "default_opus_bitrate")]
+        bitrate: u16,
+
+        #[serde(default = "default_opus_bitrate_type")]
+        bitrate_type: OpusBitrateType,
+    },
+}
+
+impl Transcode {
+    pub fn extention(&self) -> &'static str {
+        match self {
+            Transcode::Opus { .. } => "opus",
+        }
+    }
+}
+
+fn default_opus_bitrate() -> u16 {
+    160
+}
+
+fn default_opus_bitrate_type() -> OpusBitrateType {
+    OpusBitrateType::Vbr
+}
+
+impl Default for Transcode {
+    fn default() -> Self {
+        Transcode::Opus {
+            bitrate: default_opus_bitrate(),
+            bitrate_type: default_opus_bitrate_type(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub enum OpusBitrateType {
+    #[serde(rename = "cbr")]
+    Cbr,
+    #[serde(rename = "vbr")]
+    Vbr,
+}
+
+#[derive(Debug, Default, Deserialize)]
 struct ConfigFile {
-    pub from: Option<PathBuf>,
-    pub to: Option<PathBuf>,
+    from: Option<PathBuf>,
+    to: Option<PathBuf>,
+
+    #[serde(default)]
+    matches: Vec<TranscodeMatchFile>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TranscodeMatchFile {
+    regex: String,
+    to: Transcode,
 }
 
 pub fn config() -> Result<Config> {
     use clap::Arg;
 
-    let matches = clap::App::new("audio-conv")
+    let arg_matches = clap::App::new("audio-conv")
         .version(clap::crate_version!())
         .about("Converts audio files")
         .arg(
@@ -48,7 +111,7 @@ pub fn config() -> Result<Config> {
 
     let current_dir = std::env::current_dir().context("could not get current directory")?;
 
-    let config_path = matches.value_of_os("config");
+    let config_path = arg_matches.value_of_os("config");
     let force_load = config_path.is_some();
     let config_path = config_path
         .map(AsRef::<Path>::as_ref)
@@ -69,9 +132,40 @@ pub fn config() -> Result<Config> {
         )));
     }
 
+    let transcode_matches = config_file
+        .as_ref()
+        .map(|config_file| {
+            config_file
+                .matches
+                .iter()
+                .map(|m| {
+                    Ok(TranscodeMatch {
+                        regex: RegexBuilder::new(&m.regex)
+                            .case_insensitive(true)
+                            .build()
+                            .context("failed compiling regex")?,
+                        to: m.to.clone(),
+                    })
+                })
+                .collect::<Result<Vec<_>>>()
+        })
+        .transpose()?
+        .filter(|matches| !matches.is_empty())
+        .unwrap_or_else(|| {
+            let default_regex = RegexBuilder::new("\\.flac$")
+                .case_insensitive(true)
+                .build()
+                .expect("failed compiling default match regex");
+
+            vec![TranscodeMatch {
+                regex: default_regex,
+                to: Transcode::default(),
+            }]
+        });
+
     Ok(Config {
         from: {
-            matches
+            arg_matches
                 .value_of_os("from")
                 .map(|p| current_dir.join(p))
                 .or_else(|| {
@@ -85,7 +179,7 @@ pub fn config() -> Result<Config> {
                 .canonicalize()
                 .context("could not canonicalize \"from\" path")?
         },
-        to: matches
+        to: arg_matches
             .value_of_os("to")
             .map(|p| current_dir.join(p))
             .or_else(|| {
@@ -98,6 +192,7 @@ pub fn config() -> Result<Config> {
             .ok_or_else(|| Error::msg("\"to\" not configured"))?
             .canonicalize()
             .context("could not canonicalize \"to\" path")?,
+        matches: transcode_matches,
     })
 }
 
@@ -108,6 +203,6 @@ fn load_config_file(path: &Path) -> Result<Option<ConfigFile>> {
         Err(err) => return Err(Error::new(err)),
     };
     let config: ConfigFile =
-        serde_yaml::from_reader(&mut file).context("could not read config file")?;
+        serde_yaml::from_reader(&mut file).context("could not parse config file")?;
     Ok(Some(config))
 }

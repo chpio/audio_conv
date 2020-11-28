@@ -1,5 +1,6 @@
 mod config;
 
+use crate::config::Config;
 use anyhow::{Context, Result};
 use futures::{channel::mpsc, prelude::*};
 use glib::GString;
@@ -7,18 +8,19 @@ use gstreamer::Element;
 use gstreamer_audio::{prelude::*, AudioEncoder};
 use gstreamer_base::prelude::*;
 use std::{
+    borrow::Cow,
     ffi,
     path::{Path, PathBuf},
 };
 
 fn gmake<T: IsA<Element>>(factory_name: &str) -> Result<T> {
     let res = gstreamer::ElementFactory::make(factory_name, None)
-        .with_context(|| format!("could not make {}", factory_name))?
+        .with_context(|| format!("could not make gstreamer Element \"{}\"", factory_name))?
         .downcast()
         .ok()
         .with_context(|| {
             format!(
-                "could not cast {} into `{}`",
+                "could not cast gstreamer Element \"{}\" into `{}`",
                 factory_name,
                 std::any::type_name::<T>()
             )
@@ -26,32 +28,56 @@ fn gmake<T: IsA<Element>>(factory_name: &str) -> Result<T> {
     Ok(res)
 }
 
-fn get_path_pairs(input: PathBuf, output: PathBuf) -> impl Iterator<Item = (PathBuf, PathBuf)> {
-    walkdir::WalkDir::new(input.as_path())
+struct ConvertionArgs {
+    from: PathBuf,
+    to: PathBuf,
+    transcode: config::Transcode,
+}
+
+fn get_path_pairs(config: Config) -> impl Iterator<Item = ConvertionArgs> {
+    walkdir::WalkDir::new(&config.from)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .map(|ext| ext == "flac")
-                .unwrap_or(false)
-        })
-        .map(move |e| {
-            let mut out = output.join(e.path().strip_prefix(&input).unwrap());
-            out.set_extension("opus");
-            (e, out)
-        })
-        .filter(|(e, out)| {
-            let in_mtime = e.metadata().unwrap().modified().unwrap();
-            let out_mtime = out.metadata().and_then(|md| md.modified());
-            match out_mtime {
-                Ok(out_mtime) => out_mtime < in_mtime,
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => true,
-                Err(err) => panic!(err),
+        .filter_map(move |e| {
+            let from_bytes = path_to_bytes(e.path());
+
+            let transcode = config
+                .matches
+                .iter()
+                .filter(|m| m.regex.is_match(from_bytes.as_ref()))
+                .map(|m| m.to.clone())
+                .next();
+            let transcode = if let Some(transcode) = transcode {
+                transcode
+            } else {
+                return None;
+            };
+
+            let mut to = config.to.join(e.path().strip_prefix(&config.from).unwrap());
+            to.set_extension(transcode.extention());
+
+            let is_newer = {
+                // TODO: error handling
+                let from_mtime = e.metadata().unwrap().modified().unwrap();
+                let to_mtime = to.metadata().and_then(|md| md.modified());
+                match to_mtime {
+                    Ok(to_mtime) => to_mtime < from_mtime,
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => true,
+                    Err(err) => panic!(err),
+                }
+            };
+
+            if !is_newer {
+                return None;
             }
+
+            Some(ConvertionArgs {
+                from: e.path().to_path_buf(),
+                to,
+                transcode,
+            })
         })
-        .map(|(e, out)| (e.into_path(), out))
 }
 
 fn main() -> Result<()> {
@@ -62,16 +88,21 @@ fn main() -> Result<()> {
 
     // move blocking directory reading to an external thread
     let pair_producer = std::thread::spawn(|| {
-        let produce_pairs = futures::stream::iter(get_path_pairs(config.from, config.to))
+        let produce_pairs = futures::stream::iter(get_path_pairs(config))
             .map(Ok)
             .forward(pair_tx)
             .map(|res| res.context("sending path pairs failed"));
         futures::executor::block_on(produce_pairs)
     });
 
-    let transcoder = pair_rx.for_each_concurrent(num_cpus::get(), |(src, dest)| async move {
-        if let Err(err) = transcode(src.as_path(), dest.as_path()).await {
-            println!("err {} => {}:\n{:?}", src.display(), dest.display(), err);
+    let transcoder = pair_rx.for_each_concurrent(num_cpus::get(), |args| async move {
+        if let Err(err) = transcode(&args).await {
+            println!(
+                "err {} => {}:\n{:?}",
+                args.from.display(),
+                args.to.display(),
+                err
+            );
         }
     });
     futures::executor::block_on(transcoder);
@@ -83,13 +114,13 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-async fn transcode(src: &Path, dest: &Path) -> Result<()> {
+async fn transcode(args: &ConvertionArgs) -> Result<()> {
     let file_src: gstreamer_base::BaseSrc = gmake("filesrc")?;
-    file_src.set_property("location", &path_to_gstring(src))?;
+    file_src.set_property("location", &path_to_gstring(&args.from))?;
 
     // encode into a tmp file first, then rename to actuall file name, that way we're writing
     // "whole" files to the intended file path, ignoring partial files in the mtime check
-    let tmp_dest = dest.with_extension("tmp");
+    let tmp_dest = args.to.with_extension("tmp");
     let file_dest: gstreamer_base::BaseSink = gmake("filesink")?;
     file_dest.set_property("location", &path_to_gstring(&tmp_dest))?;
     file_dest.set_sync(false);
@@ -99,9 +130,24 @@ async fn transcode(src: &Path, dest: &Path) -> Result<()> {
     resample.set_property("quality", &7)?;
 
     let encoder: AudioEncoder = gmake("opusenc")?;
-    encoder.set_property("bitrate", &160_000)?;
-    // 0 = cbr; 1 = vbr
-    encoder.set_property_from_str("bitrate-type", "1");
+
+    let config::Transcode::Opus {
+        bitrate,
+        bitrate_type,
+    } = &args.transcode;
+    encoder.set_property(
+        "bitrate",
+        &i32::from(*bitrate)
+            .checked_mul(1_000)
+            .context("bitrate overflowed")?,
+    )?;
+    encoder.set_property_from_str(
+        "bitrate-type",
+        match bitrate_type {
+            config::OpusBitrateType::Vbr => "1",
+            config::OpusBitrateType::Cbr => "0",
+        },
+    );
 
     let elems: &[&Element] = &[
         file_src.upcast_ref(),
@@ -123,8 +169,9 @@ async fn transcode(src: &Path, dest: &Path) -> Result<()> {
     let bus = pipeline.get_bus().context("pipe get bus")?;
 
     std::fs::create_dir_all(
-        dest.parent()
-            .with_context(|| format!("could not get parent dir for {}", dest.display()))?,
+        args.to
+            .parent()
+            .with_context(|| format!("could not get parent dir for {}", args.to.display()))?,
     )?;
 
     rm_file_on_err(&tmp_dest, async {
@@ -158,7 +205,7 @@ async fn transcode(src: &Path, dest: &Path) -> Result<()> {
             .set_state(gstreamer::State::Null)
             .context("Unable to set the pipeline to the `Null` state")?;
 
-        std::fs::rename(&tmp_dest, dest)?;
+        std::fs::rename(&tmp_dest, &args.to)?;
 
         Ok(())
     })
@@ -181,32 +228,33 @@ where
     }
 }
 
-fn path_to_gstring(path: &Path) -> GString {
-    let buf = {
+fn path_to_bytes(path: &Path) -> Cow<'_, [u8]> {
+    // https://stackoverflow.com/a/59224987/5572146
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        Cow::Borrowed(path.as_os_str().as_bytes())
+    }
+
+    #[cfg(windows)]
+    {
         let mut buf = Vec::<u8>::new();
+        // NOT TESTED
+        // FIXME: test and post answer to https://stackoverflow.com/questions/38948669
+        use std::os::windows::ffi::OsStrExt;
+        buf.extend(
+            path.as_os_str()
+                .encode_wide()
+                .map(|char| char.to_ne_bytes())
+                .flatten(),
+        );
+        Cow::Owned(buf)
+    }
+}
 
-        // https://stackoverflow.com/a/59224987/5572146
-        #[cfg(unix)]
-        {
-            use std::os::unix::ffi::OsStrExt;
-            buf.extend(path.as_os_str().as_bytes());
-        }
-
-        #[cfg(windows)]
-        {
-            // NOT TESTED
-            // FIXME: test and post answer to https://stackoverflow.com/questions/38948669
-            use std::os::windows::ffi::OsStrExt;
-            buf.extend(
-                path.as_os_str()
-                    .encode_wide()
-                    .map(|char| char.to_ne_bytes())
-                    .flatten(),
-            );
-        }
-
-        buf
-    };
-
-    ffi::CString::new(buf).unwrap().into()
+fn path_to_gstring(path: &Path) -> GString {
+    let buf = path_to_bytes(path);
+    ffi::CString::new(buf)
+        .expect("Path contained null byte")
+        .into()
 }
