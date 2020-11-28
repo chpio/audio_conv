@@ -1,4 +1,5 @@
 use anyhow::{Context, Error, Result};
+use globset::GlobBuilder;
 use regex::bytes::{Regex, RegexBuilder};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -73,7 +74,8 @@ struct ConfigFile {
 
 #[derive(Debug, Deserialize)]
 struct TranscodeMatchFile {
-    regex: String,
+    glob: Option<String>,
+    regex: Option<String>,
     to: Transcode,
 }
 
@@ -132,6 +134,11 @@ pub fn config() -> Result<Config> {
         )));
     }
 
+    let default_regex = RegexBuilder::new("\\.flac$")
+        .case_insensitive(true)
+        .build()
+        .expect("failed compiling default match regex");
+
     let transcode_matches = config_file
         .as_ref()
         .map(|config_file| {
@@ -139,11 +146,28 @@ pub fn config() -> Result<Config> {
                 .matches
                 .iter()
                 .map(|m| {
-                    Ok(TranscodeMatch {
-                        regex: RegexBuilder::new(&m.regex)
+                    let regex = match (&m.glob, &m.regex) {
+                        (None, None) => default_regex.clone(),
+                        (Some(_), Some(_)) => {
+                            return Err(Error::msg(
+                                "`glob` and `regex` set for matcher, there can only be one!\nhttps://www.youtube.com/watch?v=5JgAMM3ADCw",
+                            ));
+                        }
+                        (Some(glob), None) => {
+                            let glob = GlobBuilder::new(glob)
+                                .case_insensitive(true)
+                                .build()
+                                .context("failed building glob")?;
+                            Regex::new(glob.regex()).context("failed compiling regex")?
+                        }
+                        (None, Some(regex)) => RegexBuilder::new(regex)
                             .case_insensitive(true)
                             .build()
                             .context("failed compiling regex")?,
+                    };
+
+                    Ok(TranscodeMatch {
+                        regex,
                         to: m.to.clone(),
                     })
                 })
@@ -152,11 +176,6 @@ pub fn config() -> Result<Config> {
         .transpose()?
         .filter(|matches| !matches.is_empty())
         .unwrap_or_else(|| {
-            let default_regex = RegexBuilder::new("\\.flac$")
-                .case_insensitive(true)
-                .build()
-                .expect("failed compiling default match regex");
-
             vec![TranscodeMatch {
                 regex: default_regex,
                 to: Transcode::default(),
