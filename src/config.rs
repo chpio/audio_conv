@@ -134,7 +134,7 @@ pub fn config() -> Result<Config> {
         )));
     }
 
-    let default_regex = RegexBuilder::new("\\.flac$")
+    let default_regex = RegexBuilder::new("\\.(flac|wav)$")
         .case_insensitive(true)
         .build()
         .expect("failed compiling default match regex");
