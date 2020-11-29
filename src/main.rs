@@ -5,7 +5,6 @@ use anyhow::{Context, Error, Result};
 use futures::{channel::mpsc, prelude::*};
 use glib::{subclass::prelude::*, GBoxed, GString};
 use gstreamer::{gst_element_error, prelude::*, Element};
-use gstreamer_audio::AudioEncoder;
 use gstreamer_base::prelude::*;
 use std::{
     borrow::Cow,
@@ -150,7 +149,7 @@ fn main() -> Result<()> {
 }
 
 async fn transcode(args: &ConvertionArgs) -> Result<()> {
-    let file_src: gstreamer_base::BaseSrc = gmake("filesrc")?;
+    let file_src: Element = gmake("filesrc")?;
     file_src.set_property("location", &path_to_gstring(&args.from))?;
 
     // encode into a tmp file first, then rename to actuall file name, that way we're writing
@@ -159,7 +158,7 @@ async fn transcode(args: &ConvertionArgs) -> Result<()> {
 
     let decodebin: Element = gmake("decodebin")?;
 
-    let src_elems: &[&Element] = &[file_src.upcast_ref(), &decodebin];
+    let src_elems: &[&Element] = &[&file_src, &decodebin];
 
     let pipeline = gstreamer::Pipeline::new(None);
 
@@ -218,7 +217,7 @@ async fn transcode(args: &ConvertionArgs) -> Result<()> {
                     bitrate,
                     bitrate_type,
                 } => {
-                    let encoder: AudioEncoder = gmake("opusenc")?;
+                    let encoder: Element = gmake("opusenc")?;
                     encoder.set_property(
                         "bitrate",
                         &i32::from(*bitrate)
@@ -233,7 +232,7 @@ async fn transcode(args: &ConvertionArgs) -> Result<()> {
                         },
                     );
 
-                    dest_elems.push(encoder.upcast());
+                    dest_elems.push(encoder);
                     dest_elems.push(gmake("oggmux")?);
                 }
             };
