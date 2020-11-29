@@ -5,9 +5,9 @@ authors = ["Thomas Heck <t@b128.net>"]
 edition = "2018"
 
 [dependencies]
-gstreamer-audio = "0.16"
-gstreamer = "0.16"
-gstreamer-base = "0.16"
+gstreamer-audio = { version = "0.16", features = ["v1_10"] }
+gstreamer = { version = "0.16", features = ["v1_10"] }
+gstreamer-base = { version = "0.16", features = ["v1_10"] }
 glib = "0.10"
 futures = "0.3"
 num_cpus = "1"
@@ -19,3 +19,4 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8"
 regex = "1"
 globset = "0.4"
+derive_more = "0.99"

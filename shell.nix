@@ -17,6 +17,6 @@ in
             gst_all_1.gst-plugins-base
 
             # needed for flac
-            gst_all_1.gst-plugins-good 
+            gst_all_1.gst-plugins-good
         ];
     }
