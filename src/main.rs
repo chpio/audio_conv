@@ -89,7 +89,7 @@ fn get_path_pairs(config: Config) -> impl Iterator<Item = ConvertionArgs> {
             };
 
             let mut to = config.to.join(e.path().strip_prefix(&config.from).unwrap());
-            to.set_extension(transcode.extention());
+            to.set_extension(transcode.extension());
 
             let is_newer = {
                 // TODO: error handling

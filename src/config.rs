@@ -31,7 +31,7 @@ pub enum Transcode {
 }
 
 impl Transcode {
-    pub fn extention(&self) -> &'static str {
+    pub fn extension(&self) -> &'static str {
         match self {
             Transcode::Opus { .. } => "opus",
         }
