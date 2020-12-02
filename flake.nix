@@ -2,11 +2,12 @@
     description = "Converts audio files";
 
     inputs = {
-        nixpkgs.url = github:NixOS/nixpkgs/nixos-20.09;
         import-cargo.url = github:edolstra/import-cargo;
+        nixpkgs.url = github:NixOS/nixpkgs/nixos-20.09;
+        nixpkgs-unstable.url = github:NixOS/nixpkgs/nixos-unstable;
     };
 
-    outputs = { self, nixpkgs, import-cargo }:
+    outputs = { self, nixpkgs, nixpkgs-unstable, import-cargo }:
         let
             inherit (import-cargo.builders) importCargo;
         in {
@@ -47,7 +48,7 @@
                 };
 
             devShell.x86_64-linux =
-                with import nixpkgs { system = "x86_64-linux"; };
+                with import nixpkgs-unstable { system = "x86_64-linux"; };
                 stdenv.mkDerivation {
                     name = "audio-conv";
                     buildInputs = [
