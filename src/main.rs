@@ -454,11 +454,18 @@ async fn transcode(
                     .and_then(|time| time.nanoseconds());
 
                 let ratio = dur.and_then(|dur| {
+                    if dur == 0 {
+                        return None;
+                    }
+
                     let pos = decodebin
                         .query_position::<ClockTime>()
                         .and_then(|time| time.nanoseconds());
 
-                    pos.map(|pos| pos as f64 / dur as f64)
+                    pos.map(|pos| {
+                        let ratio = pos as f64 / dur as f64;
+                        ratio.max(0.0).min(1.0)
+                    })
                 });
 
                 if let Some(ratio) = ratio {
