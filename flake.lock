@@ -1,5 +1,20 @@
 {
   "nodes": {
+    "flake-utils": {
+      "locked": {
+        "lastModified": 1605370193,
+        "narHash": "sha256-YyMTf3URDL/otKdKgtoMChu4vfVL3vCMkRqpGifhUn0=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "5021eac20303a61fafe17224c087f5519baed54d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    },
     "import-cargo": {
       "locked": {
         "lastModified": 1594305518,
@@ -17,41 +32,24 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1606667422,
-        "narHash": "sha256-NhCeG6NpetMWkflygIn6vHipuxFbrKzlFScr8+PONYQ=",
+        "lastModified": 1608363953,
+        "narHash": "sha256-/gAJNaV0a9Yqx8i2CXkkw3H7LhL5Tw3aUao51S9AVKc=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "3c72bb875e67ad1bce805fe26a8a5d3a0e8078ed",
+        "rev": "453c116254abe3d7b6b9938ff8092447333db1aa",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "nixos-20.09",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs-unstable": {
-      "locked": {
-        "lastModified": 1606725183,
-        "narHash": "sha256-QIdgDJUnT/Gq8vURmQqy1tTVpI0cWryoD9/auCAkQbE=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "24eb3f87fc610f18de7076aee7c5a84ac5591e3e",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
         "repo": "nixpkgs",
         "type": "github"
       }
     },
     "root": {
       "inputs": {
+        "flake-utils": "flake-utils",
         "import-cargo": "import-cargo",
-        "nixpkgs": "nixpkgs",
-        "nixpkgs-unstable": "nixpkgs-unstable"
+        "nixpkgs": "nixpkgs"
       }
     }
   },

@@ -2,18 +2,35 @@
     description = "Converts audio files";
 
     inputs = {
+        nixpkgs.url = github:NixOS/nixpkgs;
+        flake-utils.url = "github:numtide/flake-utils";
         import-cargo.url = github:edolstra/import-cargo;
-        nixpkgs.url = github:NixOS/nixpkgs/nixos-20.09;
-        nixpkgs-unstable.url = github:NixOS/nixpkgs/nixos-unstable;
     };
 
-    outputs = { self, nixpkgs, nixpkgs-unstable, import-cargo }:
-        let
-            inherit (import-cargo.builders) importCargo;
-        in {
-            defaultPackage.x86_64-linux =
-                with import nixpkgs { system = "x86_64-linux"; };
-                stdenv.mkDerivation {
+    outputs = { self, flake-utils, nixpkgs, import-cargo }:
+        flake-utils.lib.eachDefaultSystem (system:
+            let
+                pkgs = import nixpkgs { inherit system; };
+
+                buildtimeDeps = with pkgs; [
+                    cargo
+                    rustc
+                    pkg-config
+                ];
+
+                runtimeDeps = with pkgs; [
+                    gst_all_1.gstreamer
+
+                    # needed for opus, resample, ...
+                    gst_all_1.gst-plugins-base
+
+                    # needed for flac
+                    gst_all_1.gst-plugins-good
+                ];
+
+                inherit (import-cargo.builders) importCargo;
+            in {
+                defaultPackage = pkgs.stdenv.mkDerivation {
                     name = "audio-conv";
                     src = self;
 
@@ -21,22 +38,10 @@
                         # setupHook which makes sure that a CARGO_HOME with vendored dependencies
                         # exists
                         (importCargo { lockFile = ./Cargo.lock; inherit pkgs; }).cargoHome
+                    ]
+                        ++ buildtimeDeps;
 
-                        # Build-time dependencies
-                        cargo
-                        rustc
-                        pkg-config
-                    ];
-
-                    buildInputs = [
-                        gst_all_1.gstreamer
-
-                        # needed for opus, resample, ...
-                        gst_all_1.gst-plugins-base
-
-                        # needed for flac
-                        gst_all_1.gst-plugins-good
-                    ];
+                    buildInputs = runtimeDeps;
 
                     buildPhase = ''
                         cargo build --release --offline
@@ -47,25 +52,12 @@
                     '';
                 };
 
-            devShell.x86_64-linux =
-                with import nixpkgs-unstable { system = "x86_64-linux"; };
-                stdenv.mkDerivation {
+                devShell = pkgs.stdenv.mkDerivation {
                     name = "audio-conv";
-                    buildInputs = [
-                        cargo
-                        rustc
-                        rustfmt
-                        rust-analyzer
-
-                        pkg-config
-                        gst_all_1.gstreamer
-
-                        # needed for opus, resample, ...
-                        gst_all_1.gst-plugins-base
-
-                        # needed for flac
-                        gst_all_1.gst-plugins-good
-                    ];
+                    buildInputs = [ pkgs.rustfmt pkgs.rust-analyzer ]
+                        ++ buildtimeDeps
+                        ++ runtimeDeps;
                 };
-        };
+            }
+        );
 }
