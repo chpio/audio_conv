@@ -26,4 +26,4 @@ tui = { version = "0.13", default-features = false, features = ["crossterm"] }
 [dependencies.tokio]
 version = "0.3"
 default-features = false
-features = ["sync", "rt", "macros", "time"]
+features = ["sync", "rt", "macros", "time", "fs", "io-util"]

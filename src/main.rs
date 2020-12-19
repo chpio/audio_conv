@@ -12,13 +12,12 @@ use std::{
     error::Error as StdError,
     ffi, fmt,
     fmt::Write as FmtWrite,
-    io::Write as IoWrite,
     path::{Path, PathBuf},
     result::Result as StdResult,
     sync::Arc,
     time::Duration,
 };
-use tokio::{task, time::interval};
+use tokio::{fs, io::AsyncWriteExt, task, time::interval};
 
 #[derive(Clone, Debug, GBoxed)]
 #[gboxed(type_name = "GBoxErrorWrapper")]
@@ -189,10 +188,11 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
                             args.rel_from_path.display()
                         ));
 
-                        let mut log_file = match std::fs::OpenOptions::new()
+                        let mut log_file = match fs::OpenOptions::new()
                             .create(true)
                             .append(true)
                             .open(log_path)
+                            .await
                         {
                             Ok(log_file) => log_file,
                             Err(fs_err) => {
@@ -204,12 +204,15 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
                         let mut err_str = String::new();
                         write!(&mut err_str, "{:?}\n", err).context("TODO")?;
 
-                        log_file.write_all(err_str.as_ref()).map_err(|fs_err| {
-                            err.context(format!(
-                                "Unable to write transcoding error to log file (fs error: {})",
-                                fs_err
-                            ))
-                        })?;
+                        log_file
+                            .write_all(err_str.as_ref())
+                            .map_err(|fs_err| {
+                                err.context(format!(
+                                    "Unable to write transcoding error to log file (fs error: {})",
+                                    fs_err
+                                ))
+                            })
+                            .await?;
 
                         msg_queue.push(ui::Msg::TaskError { id: i });
                     }
@@ -362,11 +365,12 @@ async fn transcode(
 
     let bus = pipeline.get_bus().context("pipe get bus")?;
 
-    std::fs::create_dir_all(
+    fs::create_dir_all(
         to_path
             .parent()
             .with_context(|| format!("could not get parent dir for {}", to_path.display()))?,
-    )?;
+    )
+    .await?;
 
     rm_file_on_err(&to_path_tmp, async {
         pipeline
@@ -475,7 +479,7 @@ async fn transcode(
             .set_state(gstreamer::State::Null)
             .context("Unable to set the pipeline to the `Null` state")?;
 
-        std::fs::rename(&to_path_tmp, &to_path)?;
+        fs::rename(&to_path_tmp, &to_path).await?;
 
         Ok(())
     })
@@ -487,7 +491,7 @@ where
     F: Future<Output = Result<T>>,
 {
     match f.await {
-        Err(err) => match std::fs::remove_file(path) {
+        Err(err) => match fs::remove_file(path).await {
             Ok(..) => Err(err),
             Err(fs_err) if fs_err.kind() == std::io::ErrorKind::NotFound => Err(err),
             Err(fs_err) => {
