@@ -158,9 +158,10 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
     .await
     .context("init task failed")??;
 
-    let log_path = Path::new("./audio-conv.log")
+    let log_path = Path::new(".")
         .canonicalize()
-        .context("unable to canonicalize path to log file")?;
+        .context("unable to canonicalize path to log file")?
+        .join("audio-conv.log");
 
     ui_queue.push(ui::Msg::Init {
         task_len: conv_args.len(),
