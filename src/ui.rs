@@ -125,6 +125,10 @@ impl State {
             return Ok(());
         };
 
+        if task_len == 0 {
+            return Ok(());
+        }
+
         let tasks_ended = self.ended_tasks;
 
         let mut running_tasks: Vec<_> = self.running_tasks.values().cloned().collect();
