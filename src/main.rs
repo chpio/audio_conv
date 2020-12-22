@@ -316,13 +316,32 @@ async fn transcode(
                     encoder.set_property_from_str(
                         "bitrate-type",
                         match bitrate_type {
-                            config::OpusBitrateType::Vbr => "1",
-                            config::OpusBitrateType::Cbr => "0",
+                            config::BitrateType::Vbr => "1",
+                            config::BitrateType::Cbr => "0",
                         },
                     );
 
                     dest_elems.push(encoder);
                     dest_elems.push(gmake("oggmux")?);
+                }
+                config::Transcode::Mp3 {
+                    bitrate,
+                    bitrate_type,
+                } => {
+                    let encoder: Element = gmake("lamemp3enc")?;
+                    // target: "1" = "bitrate"
+                    encoder.set_property_from_str("target", "1");
+                    encoder.set_property("bitrate", &i32::from(*bitrate))?;
+                    encoder.set_property(
+                        "cbr",
+                        match bitrate_type {
+                            config::BitrateType::Vbr => &false,
+                            config::BitrateType::Cbr => &true,
+                        },
+                    )?;
+
+                    dest_elems.push(encoder);
+                    dest_elems.push(gmake("id3v2mux")?);
                 }
             };
 

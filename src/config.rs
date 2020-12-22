@@ -25,8 +25,17 @@ pub enum Transcode {
         #[serde(default = "default_opus_bitrate")]
         bitrate: u16,
 
-        #[serde(default = "default_opus_bitrate_type")]
-        bitrate_type: OpusBitrateType,
+        #[serde(default = "bitrate_type_vbr")]
+        bitrate_type: BitrateType,
+    },
+
+    #[serde(rename = "mp3")]
+    Mp3 {
+        #[serde(default = "default_mp3_bitrate")]
+        bitrate: u16,
+
+        #[serde(default = "bitrate_type_vbr")]
+        bitrate_type: BitrateType,
     },
 }
 
@@ -34,6 +43,7 @@ impl Transcode {
     pub fn extension(&self) -> &'static str {
         match self {
             Transcode::Opus { .. } => "opus",
+            Transcode::Mp3 { .. } => "mp3",
         }
     }
 }
@@ -42,21 +52,25 @@ fn default_opus_bitrate() -> u16 {
     160
 }
 
-fn default_opus_bitrate_type() -> OpusBitrateType {
-    OpusBitrateType::Vbr
+fn bitrate_type_vbr() -> BitrateType {
+    BitrateType::Vbr
+}
+
+fn default_mp3_bitrate() -> u16 {
+    256
 }
 
 impl Default for Transcode {
     fn default() -> Self {
         Transcode::Opus {
             bitrate: default_opus_bitrate(),
-            bitrate_type: default_opus_bitrate_type(),
+            bitrate_type: bitrate_type_vbr(),
         }
     }
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub enum OpusBitrateType {
+pub enum BitrateType {
     #[serde(rename = "cbr")]
     Cbr,
     #[serde(rename = "vbr")]
