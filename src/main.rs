@@ -82,7 +82,11 @@ fn get_convertion_args(config: &Config) -> impl Iterator<Item = ConvertionArgs> 
             let transcode = config
                 .matches
                 .iter()
-                .filter(|m| m.regex.is_match(from_bytes.as_ref()))
+                .filter(|m| {
+                    m.regexes
+                        .iter()
+                        .any(|regex| regex.is_match(from_bytes.as_ref()))
+                })
                 .map(|m| m.to.clone())
                 .next();
             let transcode = if let Some(transcode) = transcode {

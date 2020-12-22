@@ -13,7 +13,7 @@ pub struct Config {
 
 #[derive(Clone, Debug)]
 pub struct TranscodeMatch {
-    pub regex: Regex,
+    pub regexes: Vec<Regex>,
     pub to: Transcode,
 }
 
@@ -160,28 +160,31 @@ pub fn config() -> Result<Config> {
                 .matches
                 .iter()
                 .map(|m| {
-                    let regex = match (&m.glob, &m.regex) {
-                        (None, None) => default_regex.clone(),
-                        (Some(_), Some(_)) => {
-                            return Err(Error::msg(
-                                "`glob` and `regex` set for matcher, there can only be one!\nhttps://www.youtube.com/watch?v=5JgAMM3ADCw",
-                            ));
-                        }
-                        (Some(glob), None) => {
-                            let glob = GlobBuilder::new(glob)
-                                .case_insensitive(true)
-                                .build()
-                                .context("failed building glob")?;
-                            Regex::new(glob.regex()).context("failed compiling regex")?
-                        }
-                        (None, Some(regex)) => RegexBuilder::new(regex)
+                    let mut regexes = Vec::with_capacity(1);
+
+                    if let Some(glob) = &m.glob {
+                        let glob = GlobBuilder::new(glob)
                             .case_insensitive(true)
                             .build()
-                            .context("failed compiling regex")?,
-                    };
+                            .context("failed building glob")?;
+                        let regex = Regex::new(glob.regex()).context("failed compiling regex")?;
+                        regexes.push(regex);
+                    }
+
+                    if let Some(regex) = &m.regex {
+                        let regex = RegexBuilder::new(regex)
+                            .case_insensitive(true)
+                            .build()
+                            .context("failed compiling regex")?;
+                        regexes.push(regex);
+                    }
+
+                    if regexes.is_empty() {
+                        regexes.push(default_regex.clone());
+                    }
 
                     Ok(TranscodeMatch {
-                        regex,
+                        regexes,
                         to: m.to.clone(),
                     })
                 })
@@ -191,7 +194,7 @@ pub fn config() -> Result<Config> {
         .filter(|matches| !matches.is_empty())
         .unwrap_or_else(|| {
             vec![TranscodeMatch {
-                regex: default_regex,
+                regexes: vec![default_regex],
                 to: Transcode::default(),
             }]
         });

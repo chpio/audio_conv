@@ -2,7 +2,7 @@ from: ./music
 to: ./converted_test
 matches:
   - glob: "**/*.flac"
-    # or `regex: "\.flac$"`
+    # and/or `regex: "\.flac$"`
     to:
       codec: opus
       bitrate: 160
