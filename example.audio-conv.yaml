@@ -1,14 +1,20 @@
 from: ./music
 to: ./converted_test
 matches:
-  - glob: "**/*.flac"
+  - extensions:
+      - flac
+      - wav
+    # and/or `glob: "**/*.flac"`
     # and/or `regex: "\.flac$"`
+    # you can also leave it empty for the default extensions
+
     to:
       codec: opus
       bitrate: 160
       bitrate_type: vbr # or cbr
 
     # for mp3:
+    # to:
     #   codec: mp3
     #   # one of: 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256 or 320
     #   bitrate: 256

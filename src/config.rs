@@ -90,6 +90,7 @@ struct ConfigFile {
 struct TranscodeMatchFile {
     glob: Option<String>,
     regex: Option<String>,
+    extensions: Vec<String>,
     to: Transcode,
 }
 
@@ -160,24 +161,39 @@ pub fn config() -> Result<Config> {
                 .matches
                 .iter()
                 .map(|m| {
-                    let mut regexes = Vec::with_capacity(1);
-
-                    if let Some(glob) = &m.glob {
+                    let glob = m.glob.iter().map(|glob| {
                         let glob = GlobBuilder::new(glob)
                             .case_insensitive(true)
                             .build()
                             .context("failed building glob")?;
                         let regex = Regex::new(glob.regex()).context("failed compiling regex")?;
-                        regexes.push(regex);
-                    }
+                        Ok(regex)
+                    });
 
-                    if let Some(regex) = &m.regex {
+                    let regex = m.regex.iter().map(|regex| {
                         let regex = RegexBuilder::new(regex)
                             .case_insensitive(true)
                             .build()
                             .context("failed compiling regex")?;
-                        regexes.push(regex);
-                    }
+                        Ok(regex)
+                    });
+
+                    let extensions = m.extensions.iter().map(|ext| {
+                        let mut ext = regex::escape(ext);
+                        ext.insert_str(0, &"\\.");
+                        ext.push_str("$");
+
+                        let regex = RegexBuilder::new(&ext)
+                            .case_insensitive(true)
+                            .build()
+                            .context("failed compiling regex")?;
+                        Ok(regex)
+                    });
+
+                    let mut regexes = glob
+                        .chain(regex)
+                        .chain(extensions)
+                        .collect::<Result<Vec<_>>>()?;
 
                     if regexes.is_empty() {
                         regexes.push(default_regex.clone());
