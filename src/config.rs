@@ -90,7 +90,10 @@ struct ConfigFile {
 struct TranscodeMatchFile {
     glob: Option<String>,
     regex: Option<String>,
+
+    #[serde(default)]
     extensions: Vec<String>,
+
     to: Transcode,
 }
 
