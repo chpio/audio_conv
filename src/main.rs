@@ -174,18 +174,18 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
     stream::iter(conv_args.into_iter().enumerate())
         .map(Ok)
         .try_for_each_concurrent(num_cpus::get(), |(i, args)| {
-            let config = config.clone();
-            let msg_queue = ui_queue.clone();
+            let config = &config;
+            let ui_queue = &ui_queue;
             let log_path = &log_path;
 
             async move {
-                msg_queue.push(ui::Msg::TaskStart {
+                ui_queue.push(ui::Msg::TaskStart {
                     id: i,
                     args: args.clone(),
                 });
 
-                match transcode(&config, &args, i, &msg_queue).await {
-                    Ok(()) => msg_queue.push(ui::Msg::TaskEnd { id: i }),
+                match transcode(config, &args, i, ui_queue).await {
+                    Ok(()) => ui_queue.push(ui::Msg::TaskEnd { id: i }),
                     Err(err) => {
                         let err = err.context(format!(
                             "failed transcoding \"{}\"",
@@ -218,7 +218,7 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
                             })
                             .await?;
 
-                        msg_queue.push(ui::Msg::TaskError { id: i });
+                        ui_queue.push(ui::Msg::TaskError { id: i });
                     }
                 }
 

@@ -4,14 +4,14 @@ use regex::bytes::{Regex, RegexBuilder};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Config {
     pub from: PathBuf,
     pub to: PathBuf,
     pub matches: Vec<TranscodeMatch>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct TranscodeMatch {
     pub regexes: Vec<Regex>,
     pub to: Transcode,
