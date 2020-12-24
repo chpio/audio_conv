@@ -71,12 +71,12 @@ pub struct ConvertionArgs {
     transcode: config::Transcode,
 }
 
-fn get_convertion_args(config: &Config) -> impl Iterator<Item = ConvertionArgs> + '_ {
+fn get_convertion_args(config: &Config) -> impl Iterator<Item = Result<ConvertionArgs>> + '_ {
     walkdir::WalkDir::new(&config.from)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
-        .filter_map(move |e| {
+        .map(move |e| -> Result<Option<ConvertionArgs>> {
             let from_bytes = path_to_bytes(e.path());
 
             let transcode = config
@@ -92,34 +92,50 @@ fn get_convertion_args(config: &Config) -> impl Iterator<Item = ConvertionArgs> 
             let transcode = if let Some(transcode) = transcode {
                 transcode
             } else {
-                return None;
+                return Ok(None);
             };
 
-            let rel_path = e.path().strip_prefix(&config.from).unwrap();
+            let rel_path = e.path().strip_prefix(&config.from).with_context(|| {
+                format!(
+                    "unable to get relative path for {} from {}",
+                    e.path().display(),
+                    config.from.display()
+                )
+            })?;
 
             let mut to = config.to.join(&rel_path);
             to.set_extension(transcode.extension());
 
             let is_newer = {
-                // TODO: error handling
-                let from_mtime = e.metadata().unwrap().modified().unwrap();
+                let from_mtime = e
+                    .metadata()
+                    .map_err(Error::new)
+                    .and_then(|md| md.modified().map_err(Error::new))
+                    .with_context(|| {
+                        format!("unable to get mtime for from file {}", e.path().display())
+                    })?;
                 let to_mtime = to.metadata().and_then(|md| md.modified());
                 match to_mtime {
                     Ok(to_mtime) => to_mtime < from_mtime,
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => true,
-                    Err(err) => panic!(err),
+                    Err(err) => {
+                        return Err(err).with_context(|| {
+                            format!("unable to get mtime for to file {}", to.display())
+                        })
+                    }
                 }
             };
 
-            if !is_newer {
-                return None;
+            if is_newer {
+                Ok(Some(ConvertionArgs {
+                    rel_from_path: rel_path.to_path_buf(),
+                    transcode,
+                }))
+            } else {
+                Ok(None)
             }
-
-            Some(ConvertionArgs {
-                rel_from_path: rel_path.to_path_buf(),
-                transcode,
-            })
         })
+        .filter_map(|e| e.transpose())
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -154,7 +170,9 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
         gstreamer::init()?;
         let config = config::config().context("could not get the config")?;
 
-        let conv_args = get_convertion_args(&config).collect::<Vec<_>>();
+        let conv_args = get_convertion_args(&config)
+            .collect::<Result<Vec<_>>>()
+            .context("failed loading dir structure")?;
 
         Ok((config, conv_args))
     })
