@@ -226,10 +226,6 @@ impl State {
 
         Ok(())
     }
-
-    fn print_end_report(&mut self) -> Result<()> {
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -265,7 +261,6 @@ pub fn init() -> (MsgQueue, impl Future<Output = Result<()>>) {
                 state.render()?;
 
                 if exit {
-                    state.print_end_report()?;
                     Ok(None)
                 } else {
                     Ok(Some((current_queue, state)))
