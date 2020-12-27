@@ -224,17 +224,23 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
                         };
 
                         let mut err_str = String::new();
-                        write!(&mut err_str, "{:?}\n", err).context("TODO")?;
+                        if let Err(write_err) = write!(&mut err_str, "{:?}\n", err) {
+                            let err = err.context(format!(
+                                "Unable to format transcoding error for logging (write error: {})",
+                                write_err
+                            ));
+                            return Err(err);
+                        }
 
                         log_file
                             .write_all(err_str.as_ref())
+                            .await
                             .map_err(|fs_err| {
                                 err.context(format!(
                                     "Unable to write transcoding error to log file (fs error: {})",
                                     fs_err
                                 ))
-                            })
-                            .await?;
+                            })?;
 
                         ui_queue.push(ui::Msg::TaskError { id: i });
                     }
