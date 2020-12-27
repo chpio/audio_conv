@@ -2,7 +2,10 @@ use anyhow::{Context, Error, Result};
 use globset::GlobBuilder;
 use regex::bytes::{Regex, RegexBuilder};
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug)]
 pub struct Config {
@@ -98,9 +101,9 @@ struct TranscodeMatchFile {
 }
 
 pub fn config() -> Result<Config> {
-    use clap::Arg;
+    use clap::{App, Arg, SubCommand};
 
-    let arg_matches = clap::App::new("audio-conv")
+    let arg_matches = App::new("audio-conv")
         .version(clap::crate_version!())
         .about("Converts audio files")
         .arg(
@@ -127,6 +130,7 @@ pub fn config() -> Result<Config> {
                 .takes_value(true)
                 .help("to directory path"),
         )
+        .subcommand(SubCommand::with_name("init").about("writes an example config"))
         .get_matches();
 
     let current_dir = std::env::current_dir().context("could not get current directory")?;
@@ -137,6 +141,17 @@ pub fn config() -> Result<Config> {
         .map(AsRef::<Path>::as_ref)
         .unwrap_or_else(|| AsRef::<Path>::as_ref("audio-conv.yaml"));
     let config_path = current_dir.join(config_path);
+
+    if let Some("init") = arg_matches.subcommand_name() {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&config_path)
+            .and_then(|mut f| f.write_all(std::include_bytes!("../example.audio-conv.yaml")))
+            .with_context(|| format!("unable to write config file to {}", config_path.display()))?;
+
+        std::process::exit(0);
+    }
 
     let config_dir = config_path
         .parent()
