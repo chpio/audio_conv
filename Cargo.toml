@@ -1,8 +1,18 @@
 [package]
 name = "audio-conv"
 version = "0.0.0"
-authors = ["Thomas Heck <t@b128.net>"]
 edition = "2018"
+description = "Copies directory structure and converts audio files in it"
+authors = ["Thomas Heck <t@b128.net>"]
+repository = "https://gitlab.com/chpio/audio-conv"
+license = "MIT OR Apache-2.0"
+categories = [
+    "command-line-utilities",
+    "multimedia",
+    "multimedia::audio",
+    "multimedia::encoding",
+]
+keywords = ["audio", "conversion", "opus", "flac"]
 
 [dependencies]
 gstreamer-audio = { version = "0.16", features = ["v1_10"] }
