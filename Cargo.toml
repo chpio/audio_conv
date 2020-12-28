@@ -30,7 +30,6 @@ serde_yaml = "0.8"
 regex = "1"
 globset = "0.4"
 derive_more = "0.99"
-crossterm = "0.18"
 tui = { version = "0.13", default-features = false, features = ["crossterm"] }
 
 [dependencies.tokio]
