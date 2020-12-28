@@ -13,6 +13,10 @@ categories = [
     "multimedia::encoding",
 ]
 keywords = ["audio", "conversion", "opus", "flac"]
+include = [
+    "/src/**/*",
+    "/example.audio-conv.yaml",
+]
 
 [dependencies]
 gstreamer-audio = { version = "0.16", features = ["v1_10"] }
