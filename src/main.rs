@@ -66,17 +66,17 @@ fn gmake<T: IsA<Element>>(factory_name: &str) -> Result<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ConvertionArgs {
+pub struct ConversionArgs {
     rel_from_path: PathBuf,
     transcode: config::Transcode,
 }
 
-fn get_convertion_args(config: &Config) -> impl Iterator<Item = Result<ConvertionArgs>> + '_ {
+fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<ConversionArgs>> + '_ {
     walkdir::WalkDir::new(&config.from)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
-        .map(move |e| -> Result<Option<ConvertionArgs>> {
+        .map(move |e| -> Result<Option<ConversionArgs>> {
             let from_bytes = path_to_bytes(e.path());
 
             let transcode = config
@@ -127,7 +127,7 @@ fn get_convertion_args(config: &Config) -> impl Iterator<Item = Result<Convertio
             };
 
             if is_newer {
-                Ok(Some(ConvertionArgs {
+                Ok(Some(ConversionArgs {
                     rel_from_path: rel_path.to_path_buf(),
                     transcode,
                 }))
@@ -170,7 +170,7 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
         gstreamer::init()?;
         let config = config::config().context("could not get the config")?;
 
-        let conv_args = get_convertion_args(&config)
+        let conv_args = get_conversion_args(&config)
             .collect::<Result<Vec<_>>>()
             .context("failed loading dir structure")?;
 
@@ -258,7 +258,7 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
 
 async fn transcode(
     config: &Config,
-    args: &ConvertionArgs,
+    args: &ConversionArgs,
     task_id: usize,
     queue: &ui::MsgQueue,
 ) -> Result<()> {

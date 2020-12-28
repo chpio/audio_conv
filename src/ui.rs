@@ -1,4 +1,4 @@
-use crate::ConvertionArgs;
+use crate::ConversionArgs;
 use anyhow::{Context, Result};
 use futures::Future;
 use std::{
@@ -14,7 +14,7 @@ pub const UPDATE_INTERVAL_MILLIS: u64 = 100;
 pub enum Msg {
     Init { task_len: usize, log_path: PathBuf },
     Exit,
-    TaskStart { id: usize, args: ConvertionArgs },
+    TaskStart { id: usize, args: ConversionArgs },
     TaskEnd { id: usize },
     TaskProgress { id: usize, ratio: f64 },
     TaskError { id: usize },
@@ -232,7 +232,7 @@ impl State {
 struct Task {
     id: usize,
     ratio: Option<f64>,
-    args: ConvertionArgs,
+    args: ConversionArgs,
 }
 
 pub fn init() -> (MsgQueue, impl Future<Output = Result<()>>) {
