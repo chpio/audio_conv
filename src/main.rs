@@ -3,7 +3,7 @@ mod ui;
 
 use crate::config::Config;
 use anyhow::{Context, Error, Result};
-use futures::{future, pin_mut, prelude::*};
+use futures::{pin_mut, prelude::*};
 use glib::{subclass::prelude::*, GBoxed, GString};
 use gstreamer::{gst_element_error, prelude::*, Element};
 use gstreamer_base::prelude::*;
@@ -540,13 +540,13 @@ async fn transcode(
     .await
 }
 
-async fn rm_file_on_err<F, T>(path: &Path, f: F) -> F::Output
+async fn rm_file_on_err<F, T>(path: &Path, f: F) -> Result<T>
 where
     F: Future<Output = Result<T>>,
 {
     match f.await {
         Err(err) => match fs::remove_file(path).await {
-            Ok(..) => Err(err),
+            Ok(()) => Err(err),
             Err(fs_err) if fs_err.kind() == std::io::ErrorKind::NotFound => Err(err),
             Err(fs_err) => {
                 let err = err
