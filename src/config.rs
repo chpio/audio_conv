@@ -32,6 +32,12 @@ pub enum Transcode {
         bitrate_type: BitrateType,
     },
 
+    #[serde(rename = "flac")]
+    Flac {
+        #[serde(default = "default_flac_compression")]
+        compression: u8,
+    },
+
     #[serde(rename = "mp3")]
     Mp3 {
         #[serde(default = "default_mp3_bitrate")]
@@ -46,6 +52,7 @@ impl Transcode {
     pub fn extension(&self) -> &'static str {
         match self {
             Transcode::Opus { .. } => "opus",
+            Transcode::Flac { .. } => "flac",
             Transcode::Mp3 { .. } => "mp3",
         }
     }
@@ -53,6 +60,10 @@ impl Transcode {
 
 fn default_opus_bitrate() -> u16 {
     160
+}
+
+fn default_flac_compression() -> u8 {
+    5
 }
 
 fn bitrate_type_vbr() -> BitrateType {

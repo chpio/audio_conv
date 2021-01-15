@@ -352,6 +352,13 @@ async fn transcode(
                     dest_elems.push(encoder);
                     dest_elems.push(gmake("oggmux")?);
                 }
+
+                config::Transcode::Flac { compression } => {
+                    let encoder: Element = gmake("flacenc")?;
+                    encoder.set_property_from_str("quality", &compression.to_string());
+                    dest_elems.push(encoder);
+                }
+
                 config::Transcode::Mp3 {
                     bitrate,
                     bitrate_type,
