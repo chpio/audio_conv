@@ -321,7 +321,7 @@ async fn transcode(
 
             let resample: Element = gmake("audioresample")?;
             // quality from 0 to 10
-            resample.set_property("quality", &7)?;
+            resample.set_property("quality", &10)?;
 
             let mut dest_elems = vec![
                 resample,
