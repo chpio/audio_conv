@@ -19,3 +19,9 @@ matches:
     #   # one of: 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256 or 320
     #   bitrate: 256
     #   bitrate_type: vbr # or cbr
+
+    # for flac:
+    # to:
+    #   codec: flac
+    #   # effort spend for the compression. 0 (fastes compression) to 9 (highest compression)
+    #   compression: 8
