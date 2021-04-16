@@ -13,6 +13,10 @@ matches:
       bitrate: 160
       bitrate_type: vbr # or cbr
 
+    # for copy (copies file without transcoding it):
+    # to:
+    #   codec: copy
+
     # for mp3:
     # to:
     #   codec: mp3

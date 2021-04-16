@@ -46,6 +46,9 @@ pub enum Transcode {
         #[serde(default = "bitrate_type_vbr")]
         bitrate_type: BitrateType,
     },
+
+    #[serde(rename = "copy")]
+    Copy,
 }
 
 impl Transcode {
@@ -54,6 +57,7 @@ impl Transcode {
             Transcode::Opus { .. } => "opus",
             Transcode::Flac { .. } => "flac",
             Transcode::Mp3 { .. } => "mp3",
+            Transcode::Copy => "",
         }
     }
 }

@@ -264,14 +264,39 @@ async fn transcode(
 ) -> Result<()> {
     let from_path = config.from.join(&args.rel_from_path);
     let mut to_path = config.to.join(&args.rel_from_path);
-    to_path.set_extension(args.transcode.extension());
 
-    let file_src: Element = gmake("filesrc")?;
-    file_src.set_property("location", &path_to_gstring(&from_path))?;
+    fs::create_dir_all(
+        to_path
+            .parent()
+            .with_context(|| format!("could not get parent dir for {}", to_path.display()))?,
+    )
+    .await?;
 
     // encode into a tmp file first, then rename to actuall file name, that way we're writing
     // "whole" files to the intended file path, ignoring partial files in the mtime check
     let to_path_tmp = to_path.with_extension("tmp");
+
+    if let config::Transcode::Copy = args.transcode {
+        rm_file_on_err(&to_path_tmp, async {
+            fs::copy(&from_path, &to_path_tmp).await.with_context(|| {
+                format!(
+                    "could not copy file from {} to {}",
+                    from_path.display(),
+                    to_path_tmp.display()
+                )
+            })
+        })
+        .await?;
+
+        fs::rename(&to_path_tmp, &to_path).await?;
+
+        return Ok(());
+    }
+
+    to_path.set_extension(args.transcode.extension());
+
+    let file_src: Element = gmake("filesrc")?;
+    file_src.set_property("location", &path_to_gstring(&from_path))?;
 
     let decodebin: Element = gmake("decodebin")?;
 
@@ -378,6 +403,8 @@ async fn transcode(
                     dest_elems.push(encoder);
                     dest_elems.push(gmake("id3v2mux")?);
                 }
+
+                config::Transcode::Copy => unreachable!(),
             };
 
             let file_dest: gstreamer_base::BaseSink = gmake("filesink")?;
@@ -418,13 +445,6 @@ async fn transcode(
     });
 
     let bus = pipeline.get_bus().context("pipe get bus")?;
-
-    fs::create_dir_all(
-        to_path
-            .parent()
-            .with_context(|| format!("could not get parent dir for {}", to_path.display()))?,
-    )
-    .await?;
 
     rm_file_on_err(&to_path_tmp, async {
         pipeline
