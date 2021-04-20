@@ -16,6 +16,8 @@ keywords = ["audio", "conversion", "opus", "flac"]
 include = [
     "/src/**/*",
     "/example.audio-conv.yaml",
+    "/README.md",
+    "/CHANGELOG.md",
 ]
 
 [dependencies]
