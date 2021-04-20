@@ -88,7 +88,7 @@ impl State {
             Msg::TaskEnd { id } => {
                 self.running_tasks
                     .remove(&id)
-                    .context("unable to remove finished task; could't find task")?;
+                    .context("Unable to remove finished task; could't find task")?;
                 self.ended_tasks += 1;
             }
             Msg::TaskProgress { id, ratio } => {
@@ -102,7 +102,7 @@ impl State {
                 // TODO
                 self.running_tasks
                     .remove(&id)
-                    .context("unable to remove errored task; could't find task")?;
+                    .context("Unable to remove errored task; could't find task")?;
                 self.ended_tasks += 1;
                 self.has_errored = true;
             }
@@ -136,7 +136,7 @@ impl State {
         running_tasks.sort_by_key(|task| task.id);
 
         if !self.has_rendered {
-            self.terminal.clear().context("cleaning ui failed")?;
+            self.terminal.clear().context("Clearing ui failed")?;
             self.has_rendered = true;
         }
 
@@ -222,7 +222,7 @@ impl State {
                     chunks[1],
                 );
             })
-            .context("rendering ui failed")?;
+            .context("Rendering ui failed")?;
 
         Ok(())
     }
@@ -267,8 +267,8 @@ pub fn init() -> (MsgQueue, impl Future<Output = Result<()>>) {
                 }
             })
             .await
-            .context("ui update task failed")?
-            .context("ui update failed")?;
+            .context("Ui update task failed")?
+            .context("Ui update failed")?;
 
             match render_res {
                 Some(s) => wrapped = Some(s),

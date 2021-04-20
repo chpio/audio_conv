@@ -52,12 +52,12 @@ struct GErrorMessage {
 
 fn gmake<T: IsA<Element>>(factory_name: &str) -> Result<T> {
     let res = gstreamer::ElementFactory::make(factory_name, None)
-        .with_context(|| format!("could not make gstreamer Element \"{}\"", factory_name))?
+        .with_context(|| format!("Could not make gstreamer Element \"{}\"", factory_name))?
         .downcast()
         .ok()
         .with_context(|| {
             format!(
-                "could not cast gstreamer Element \"{}\" into `{}`",
+                "Could not cast gstreamer Element \"{}\" into `{}`",
                 factory_name,
                 std::any::type_name::<T>()
             )
@@ -97,7 +97,7 @@ fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<Conversio
 
             let rel_path = e.path().strip_prefix(&config.from).with_context(|| {
                 format!(
-                    "unable to get relative path for {} from {}",
+                    "Unable to get relative path for {} from {}",
                     e.path().display(),
                     config.from.display()
                 )
@@ -112,7 +112,10 @@ fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<Conversio
                     .map_err(Error::new)
                     .and_then(|md| md.modified().map_err(Error::new))
                     .with_context(|| {
-                        format!("unable to get mtime for from file {}", e.path().display())
+                        format!(
+                            "Unable to get mtime for \"from\" file {}",
+                            e.path().display()
+                        )
                     })?;
                 let to_mtime = to.metadata().and_then(|md| md.modified());
                 match to_mtime {
@@ -120,7 +123,7 @@ fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<Conversio
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => true,
                     Err(err) => {
                         return Err(err).with_context(|| {
-                            format!("unable to get mtime for to file {}", to.display())
+                            format!("Unable to get mtime for \"to\" file {}", to.display())
                         })
                     }
                 }
@@ -147,15 +150,15 @@ async fn main() -> Result<()> {
             let main_handle = async move {
                 let ok = task::spawn_local(main_loop(ui_queue))
                     .await
-                    .context("main task failed")??;
+                    .context("Main task failed")??;
                 Result::<_>::Ok(ok)
             };
 
             let ui_handle = async move {
                 let ok = task::spawn_local(ui_fut)
                     .await
-                    .context("ui task failed")?
-                    .context("ui failed")?;
+                    .context("Ui task failed")?
+                    .context("Ui failed")?;
                 Result::<_>::Ok(ok)
             };
 
@@ -168,20 +171,20 @@ async fn main() -> Result<()> {
 async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
     let (config, conv_args) = task::spawn_blocking(|| -> Result<_> {
         gstreamer::init()?;
-        let config = config::config().context("could not get the config")?;
+        let config = config::config().context("Could not get the config")?;
 
         let conv_args = get_conversion_args(&config)
             .collect::<Result<Vec<_>>>()
-            .context("failed loading dir structure")?;
+            .context("Failed loading dir structure")?;
 
         Ok((config, conv_args))
     })
     .await
-    .context("init task failed")??;
+    .context("Init task failed")??;
 
     let log_path = Path::new(".")
         .canonicalize()
-        .context("unable to canonicalize path to log file")?
+        .context("Unable to canonicalize path to log file")?
         .join("audio-conv.log");
 
     ui_queue.push(ui::Msg::Init {
@@ -206,7 +209,7 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
                     Ok(()) => ui_queue.push(ui::Msg::TaskEnd { id: i }),
                     Err(err) => {
                         let err = err.context(format!(
-                            "failed transcoding \"{}\"",
+                            "Transcoding failed for {}",
                             args.rel_from_path.display()
                         ));
 
@@ -268,7 +271,7 @@ async fn transcode(
     fs::create_dir_all(
         to_path
             .parent()
-            .with_context(|| format!("could not get parent dir for {}", to_path.display()))?,
+            .with_context(|| format!("Could not get parent dir for {}", to_path.display()))?,
     )
     .await?;
 
@@ -281,7 +284,7 @@ async fn transcode(
             Transcode::Copy => {
                 fs::copy(&from_path, &to_path_tmp).await.with_context(|| {
                     format!(
-                        "could not copy file from {} to {}",
+                        "Could not copy file from {} to {}",
                         from_path.display(),
                         to_path_tmp.display()
                     )
@@ -303,7 +306,7 @@ async fn transcode(
 
         fs::rename(&to_path_tmp, &to_path).await.with_context(|| {
             format!(
-                "could not rename temporary file {} to {}",
+                "Could not rename temporary file {} to {}",
                 to_path_tmp.display(),
                 to_path.display()
             )
@@ -385,7 +388,7 @@ async fn transcode_gstreamer(
                         "bitrate",
                         &i32::from(*bitrate)
                             .checked_mul(1_000)
-                            .context("bitrate overflowed")?,
+                            .context("Bitrate overflowed")?,
                     )?;
                     encoder.set_property_from_str(
                         "bitrate-type",
@@ -468,7 +471,9 @@ async fn transcode_gstreamer(
         }
     });
 
-    let bus = pipeline.get_bus().context("pipe get bus")?;
+    let bus = pipeline
+        .get_bus()
+        .context("Could not get bus for pipeline")?;
 
     pipeline
         .set_state(gstreamer::State::Playing)
@@ -489,11 +494,9 @@ async fn transcode_gstreamer(
                         Ok(false)
                     }
                     MessageView::Error(err) => {
-                        pipeline.set_state(gstreamer::State::Null).context(
-                            "Unable to set the pipeline to the `Null` state, after error",
-                        )?;
+                        let pipe_stop_res = pipeline.set_state(gstreamer::State::Null);
 
-                        let err = err
+                        let err: Error = err
                             .get_details()
                             .and_then(|details| {
                                 if details.get_name() != "error-details" {
@@ -519,7 +522,15 @@ async fn transcode_gstreamer(
                                 }
                                 .into()
                             });
-                        Err(err)
+
+                        if let Err(pipe_err) = pipe_stop_res {
+                            let err = err.context(pipe_err).context(
+                                "Unable to set the pipeline to the `Null` state, after error",
+                            );
+                            Err(err)
+                        } else {
+                            Err(err)
+                        }
                     }
                     _ => Ok(true),
                 }
@@ -532,8 +543,7 @@ async fn transcode_gstreamer(
                 }
             })
             .try_for_each(|_| futures::future::ready(Ok(())))
-            .await
-            .context("failed converting")?;
+            .await?;
 
         Result::<_>::Ok(())
     };
@@ -597,7 +607,7 @@ where
             Err(fs_err) => {
                 let err = err
                     .context(fs_err)
-                    .context(format!("removing {} failed", path.display()));
+                    .context(format!("Removing file {} failed", path.display()));
                 Err(err)
             }
         },

@@ -148,7 +148,7 @@ pub fn config() -> Result<Config> {
         .subcommand(SubCommand::with_name("init").about("writes an example config"))
         .get_matches();
 
-    let current_dir = std::env::current_dir().context("could not get current directory")?;
+    let current_dir = std::env::current_dir().context("Could not get current directory")?;
 
     let config_path = arg_matches.value_of_os("config");
     let force_load = config_path.is_some();
@@ -163,17 +163,17 @@ pub fn config() -> Result<Config> {
             .create_new(true)
             .open(&config_path)
             .and_then(|mut f| f.write_all(std::include_bytes!("../example.audio-conv.yaml")))
-            .with_context(|| format!("unable to write config file to {}", config_path.display()))?;
+            .with_context(|| format!("Unable to write config file to {}", config_path.display()))?;
 
         std::process::exit(0);
     }
 
     let config_dir = config_path
         .parent()
-        .context("could not get parent directory of the config file")?;
+        .context("Could not get parent directory of the config file")?;
 
     let config_file = load_config_file(&config_path)
-        .with_context(|| format!("failed loading config file \"{}\"", config_path.display()))?;
+        .with_context(|| format!("Failed loading config file {}", config_path.display()))?;
 
     if force_load && config_file.is_none() {
         return Err(Error::msg(format!(
@@ -185,7 +185,7 @@ pub fn config() -> Result<Config> {
     let default_regex = RegexBuilder::new("\\.(flac|wav)$")
         .case_insensitive(true)
         .build()
-        .expect("failed compiling default match regex");
+        .expect("Failed compiling default match regex");
 
     let transcode_matches = config_file
         .as_ref()
@@ -198,8 +198,8 @@ pub fn config() -> Result<Config> {
                         let glob = GlobBuilder::new(glob)
                             .case_insensitive(true)
                             .build()
-                            .context("failed building glob")?;
-                        let regex = Regex::new(glob.regex()).context("failed compiling regex")?;
+                            .context("Failed building glob")?;
+                        let regex = Regex::new(glob.regex()).context("Failed compiling regex")?;
                         Ok(regex)
                     });
 
@@ -207,7 +207,7 @@ pub fn config() -> Result<Config> {
                         let regex = RegexBuilder::new(regex)
                             .case_insensitive(true)
                             .build()
-                            .context("failed compiling regex")?;
+                            .context("Failed compiling regex")?;
                         Ok(regex)
                     });
 
@@ -219,7 +219,7 @@ pub fn config() -> Result<Config> {
                         let regex = RegexBuilder::new(&ext)
                             .case_insensitive(true)
                             .build()
-                            .context("failed compiling regex")?;
+                            .context("Failed compiling regex")?;
                         Ok(regex)
                     });
 
@@ -262,7 +262,7 @@ pub fn config() -> Result<Config> {
                 })
                 .ok_or_else(|| Error::msg("\"from\" not configured"))?
                 .canonicalize()
-                .context("could not canonicalize \"from\" path")?
+                .context("Could not canonicalize \"from\" path")?
         },
         to: arg_matches
             .value_of_os("to")
@@ -276,7 +276,7 @@ pub fn config() -> Result<Config> {
             })
             .ok_or_else(|| Error::msg("\"to\" not configured"))?
             .canonicalize()
-            .context("could not canonicalize \"to\" path")?,
+            .context("Could not canonicalize \"to\" path")?,
         matches: transcode_matches,
     })
 }
@@ -288,6 +288,6 @@ fn load_config_file(path: &Path) -> Result<Option<ConfigFile>> {
         Err(err) => return Err(Error::new(err)),
     };
     let config: ConfigFile =
-        serde_yaml::from_reader(&mut file).context("could not parse config file")?;
+        serde_yaml::from_reader(&mut file).context("Could not parse config file")?;
     Ok(Some(config))
 }
