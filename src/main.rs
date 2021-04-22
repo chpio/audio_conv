@@ -192,9 +192,11 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
         log_path: log_path.clone(),
     });
 
+    let concurrent_jobs = config.jobs.unwrap_or_else(|| num_cpus::get());
+
     stream::iter(conv_args.into_iter().enumerate())
         .map(Ok)
-        .try_for_each_concurrent(num_cpus::get(), |(i, args)| {
+        .try_for_each_concurrent(concurrent_jobs, |(i, args)| {
             let config = &config;
             let ui_queue = &ui_queue;
             let log_path = &log_path;

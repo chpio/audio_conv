@@ -12,6 +12,7 @@ pub struct Config {
     pub from: PathBuf,
     pub to: PathBuf,
     pub matches: Vec<TranscodeMatch>,
+    pub jobs: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -127,7 +128,7 @@ pub fn config() -> Result<Config> {
                 .long("config")
                 .required(false)
                 .takes_value(true)
-                .help("path to an audio-conv config file, defaults to \"audio-conv.yaml\""),
+                .help("Path to an audio-conv config file, defaults to \"audio-conv.yaml\""),
         )
         .arg(
             Arg::with_name("from")
@@ -135,7 +136,7 @@ pub fn config() -> Result<Config> {
                 .long("from")
                 .required(false)
                 .takes_value(true)
-                .help("from directory path"),
+                .help("\"from\" directory path"),
         )
         .arg(
             Arg::with_name("to")
@@ -143,7 +144,15 @@ pub fn config() -> Result<Config> {
                 .long("to")
                 .required(false)
                 .takes_value(true)
-                .help("to directory path"),
+                .help("\"to\" directory path"),
+        )
+        .arg(
+            Arg::with_name("jobs")
+                .short("j")
+                .long("jobs")
+                .required(false)
+                .takes_value(true)
+                .help("Allow N jobs/transcodes at once. Defaults to number of logical cores"),
         )
         .subcommand(SubCommand::with_name("init").about("writes an example config"))
         .get_matches();
@@ -278,6 +287,24 @@ pub fn config() -> Result<Config> {
             .canonicalize()
             .context("Could not canonicalize \"to\" path")?,
         matches: transcode_matches,
+        jobs: arg_matches
+            .value_of_os("jobs")
+            .map(|jobs_os_str| {
+                let jobs_str = jobs_os_str.to_str().with_context(|| {
+                    // TODO: use `OsStr.display` when it lands
+                    // https://github.com/rust-lang/rust/pull/80841
+                    format!(
+                        "Could not convert \"jobs\" argument to string due to invalid characters",
+                    )
+                })?;
+                jobs_str.parse().with_context(|| {
+                    format!(
+                        "Could not parse \"jobs\" argument \"{}\" to a number",
+                        &jobs_str
+                    )
+                })
+            })
+            .transpose()?,
     })
 }
 

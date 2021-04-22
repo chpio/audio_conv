@@ -1,6 +1,7 @@
 # Changelog
 
 * "copy" encoding format added
+* "jobs" cli argument added, that lets you set the number of concurrent transcodes
 
 ## v1.1.0
 
