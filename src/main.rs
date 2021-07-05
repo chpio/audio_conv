@@ -571,7 +571,7 @@ async fn transcode_gstreamer(
 
                 pos.map(|pos| {
                     let ratio = pos as f64 / dur as f64;
-                    ratio.max(0.0).min(1.0)
+                    ratio.clamp(0.0, 1.0)
                 })
             });
 
