@@ -4,8 +4,8 @@ mod ui;
 use crate::config::{Config, Transcode};
 use anyhow::{Context, Error, Result};
 use futures::{pin_mut, prelude::*};
-use glib::{subclass::prelude::*, GBoxed, GString};
-use gstreamer::{gst_element_error, prelude::*, Element};
+use glib::{GBoxed, GString};
+use gstreamer::{element_error, prelude::*, Element};
 use gstreamer_base::prelude::*;
 use std::{
     borrow::Cow,
@@ -350,9 +350,9 @@ async fn transcode_gstreamer(
                 }
             };
 
-            let is_audio = src_pad.get_current_caps().and_then(|caps| {
-                caps.get_structure(0).map(|s| {
-                    let name = s.get_name();
+            let is_audio = src_pad.current_caps().and_then(|caps| {
+                caps.structure(0).map(|s| {
+                    let name = s.name();
                     name.starts_with("audio/")
                 })
             });
@@ -360,7 +360,7 @@ async fn transcode_gstreamer(
                 None => {
                     return Err(Error::msg(format!(
                         "Failed to get media type from pad {}",
-                        src_pad.get_name()
+                        src_pad.name()
                     )));
                 }
                 Some(false) => {
@@ -452,7 +452,7 @@ async fn transcode_gstreamer(
             let sink_pad = dest_elems
                 .get(0)
                 .unwrap()
-                .get_static_pad("sink")
+                .static_pad("sink")
                 .expect("1. dest element has no sinkpad");
             src_pad.link(&sink_pad)?;
 
@@ -464,7 +464,7 @@ async fn transcode_gstreamer(
                 .field("error", &GBoxErrorWrapper::new(err))
                 .build();
 
-            gst_element_error!(
+            element_error!(
                 decodebin,
                 gstreamer::LibraryError::Failed,
                 ("Failed to insert sink"),
@@ -473,9 +473,7 @@ async fn transcode_gstreamer(
         }
     });
 
-    let bus = pipeline
-        .get_bus()
-        .context("Could not get bus for pipeline")?;
+    let bus = pipeline.bus().context("Could not get bus for pipeline")?;
 
     pipeline
         .set_state(gstreamer::State::Playing)
@@ -499,28 +497,28 @@ async fn transcode_gstreamer(
                         let pipe_stop_res = pipeline.set_state(gstreamer::State::Null);
 
                         let err: Error = err
-                            .get_details()
+                            .details()
                             .and_then(|details| {
-                                if details.get_name() != "error-details" {
+                                if details.name() != "error-details" {
                                     return None;
                                 }
 
                                 let err = details
                                     .get::<&GBoxErrorWrapper>("error")
                                     .unwrap()
-                                    .map(|err| err.clone().into())
-                                    .expect("error-details message without actual error");
+                                    .clone()
+                                    .into();
                                 Some(err)
                             })
                             .unwrap_or_else(|| {
                                 GErrorMessage {
                                     src: msg
-                                        .get_src()
-                                        .map(|s| String::from(s.get_path_string()))
+                                        .src()
+                                        .map(|s| String::from(s.path_string()))
                                         .unwrap_or_else(|| String::from("None")),
-                                    error: err.get_error().to_string(),
-                                    debug: err.get_debug(),
-                                    source: err.get_error(),
+                                    error: err.error().to_string(),
+                                    debug: err.debug(),
+                                    source: err.error(),
                                 }
                                 .into()
                             });
@@ -560,7 +558,7 @@ async fn transcode_gstreamer(
 
             let dur = decodebin
                 .query_duration::<ClockTime>()
-                .and_then(|time| time.nanoseconds());
+                .map(|time| time.nseconds());
 
             let ratio = dur.and_then(|dur| {
                 if dur == 0 {
@@ -569,7 +567,7 @@ async fn transcode_gstreamer(
 
                 let pos = decodebin
                     .query_position::<ClockTime>()
-                    .and_then(|time| time.nanoseconds());
+                    .map(|time| time.nseconds());
 
                 pos.map(|pos| {
                     let ratio = pos as f64 / dur as f64;
