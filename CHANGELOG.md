@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.2.1
+
+* dependencies upgraded
+
 ## v1.2.0
 
 * "copy" encoding format added
