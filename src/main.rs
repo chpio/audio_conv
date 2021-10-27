@@ -5,16 +5,20 @@ use crate::config::{Config, Transcode};
 use anyhow::{Context, Error, Result};
 use futures::{pin_mut, prelude::*};
 use glib::{GBoxed, GString};
-use gstreamer::{element_error, prelude::*, Element};
+use gstreamer::{
+	element_error, prelude::*, Caps, Element, Pad, PadBuilder, PadDirection, PadPresence,
+	PadTemplate, Structure,
+};
 use gstreamer_base::prelude::*;
 use std::{
 	borrow::Cow,
+	collections::VecDeque,
 	error::Error as StdError,
 	ffi, fmt,
 	fmt::Write as FmtWrite,
 	path::{Path, PathBuf},
 	result::Result as StdResult,
-	sync::Arc,
+	sync::{Arc, Mutex},
 	time::Duration,
 };
 use tokio::{fs, io::AsyncWriteExt, task, time::interval};
@@ -103,30 +107,15 @@ fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<Conversio
 				)
 			})?;
 
-			let mut to = config.to.join(&rel_path);
-			to.set_extension(transcode.extension());
-
-			let is_newer = {
-				let from_mtime = e
-					.metadata()
-					.map_err(Error::new)
-					.and_then(|md| md.modified().map_err(Error::new))
-					.with_context(|| {
-						format!(
-							"Unable to get mtime for \"from\" file {}",
-							e.path().display()
-						)
-					})?;
-				let to_mtime = to.metadata().and_then(|md| md.modified());
-				match to_mtime {
-					Ok(to_mtime) => to_mtime < from_mtime,
-					Err(err) if err.kind() == std::io::ErrorKind::NotFound => true,
-					Err(err) => {
-						return Err(err).with_context(|| {
-							format!("Unable to get mtime for \"to\" file {}", to.display())
-						})
-					}
-				}
+			let is_newer = if let Transcode::CopyAudio = transcode {
+				// we are doing the "is newer check" in the transcoder, because we do not know
+				// the file extension at this moment, which is derived from the audio type in
+				// the source file
+				true
+			} else {
+				let from_path = config.to.join(&rel_path);
+				let to_path = from_path.with_extension(transcode.extension());
+				is_file_newer(&from_path, &to_path)?
 			};
 
 			if is_newer {
@@ -282,7 +271,7 @@ async fn transcode(
 	let to_path_tmp = to_path.with_extension("tmp");
 
 	rm_file_on_err(&to_path_tmp, async {
-		match args.transcode {
+		let new_extension = match args.transcode {
 			Transcode::Copy => {
 				fs::copy(&from_path, &to_path_tmp).await.with_context(|| {
 					format!(
@@ -291,6 +280,7 @@ async fn transcode(
 						to_path_tmp.display()
 					)
 				})?;
+				None
 			}
 			_ => {
 				to_path.set_extension(args.transcode.extension());
@@ -304,6 +294,10 @@ async fn transcode(
 				)
 				.await?
 			}
+		};
+
+		if let Some(new_extension) = new_extension {
+			to_path.set_extension(new_extension);
 		}
 
 		fs::rename(&to_path_tmp, &to_path).await.with_context(|| {
@@ -323,11 +317,11 @@ async fn transcode_gstreamer(
 	transcode: Transcode,
 	task_id: usize,
 	queue: &ui::MsgQueue,
-) -> Result<()> {
+) -> Result<Option<&'static str>> {
 	let file_src: Element = gmake("filesrc")?;
 	file_src.set_property("location", &path_to_gstring(&from_path))?;
 
-	let decodebin: Element = gmake("decodebin")?;
+	let decodebin: Element = gmake("parsebin")?;
 
 	let src_elems: &[&Element] = &[&file_src, &decodebin];
 
@@ -339,6 +333,10 @@ async fn transcode_gstreamer(
 	// downgrade pipeline RC to a weak RC to break the reference cycle
 	let pipeline_weak = pipeline.downgrade();
 
+	let new_extension = Arc::new(Mutex::new(None));
+
+	let new_extension_clone = new_extension.clone();
+	let from_path_clone = from_path.to_owned();
 	let to_path_clone = to_path.to_owned();
 	decodebin.connect_pad_added(move |decodebin, src_pad| {
 		let insert_sink = || -> Result<()> {
@@ -350,37 +348,31 @@ async fn transcode_gstreamer(
 				}
 			};
 
-			let is_audio = src_pad.current_caps().and_then(|caps| {
-				caps.structure(0).map(|s| {
+			let is_audio_mime = src_pad.current_caps().and_then(|caps| {
+				println!("{:?}", caps);
+
+				caps.structure(0).as_ref().map(|s| {
 					let name = s.name();
-					name.starts_with("audio/")
+					(name.starts_with("audio/"), name)
 				})
 			});
-			match is_audio {
+			let audio_mime = match is_audio_mime {
 				None => {
 					return Err(Error::msg(format!(
 						"Failed to get media type from pad {}",
 						src_pad.name()
 					)));
 				}
-				Some(false) => {
+				Some((false, ..)) => {
 					// not audio pad... ignoring
 					return Ok(());
 				}
-				Some(true) => {}
-			}
+				Some((true, mime)) => mime,
+			};
 
-			let resample: Element = gmake("audioresample")?;
-			// quality from 0 to 10
-			resample.set_property("quality", &10)?;
+			let mut dest_elems = VecDeque::new();
 
-			let mut dest_elems = vec![
-				resample,
-				// `audioconvert` converts audio format, bitdepth, ...
-				gmake("audioconvert")?,
-			];
-
-			match &transcode {
+			let is_transcoding = match &transcode {
 				Transcode::Opus {
 					bitrate,
 					bitrate_type,
@@ -400,14 +392,16 @@ async fn transcode_gstreamer(
 						},
 					);
 
-					dest_elems.push(encoder);
-					dest_elems.push(gmake("oggmux")?);
+					dest_elems.push_back(encoder);
+					dest_elems.push_back(gmake("oggmux")?);
+					true
 				}
 
 				Transcode::Flac { compression } => {
 					let encoder: Element = gmake("flacenc")?;
 					encoder.set_property_from_str("quality", &compression.to_string());
-					dest_elems.push(encoder);
+					dest_elems.push_back(encoder);
+					true
 				}
 
 				Transcode::Mp3 {
@@ -426,20 +420,85 @@ async fn transcode_gstreamer(
 						},
 					)?;
 
-					dest_elems.push(encoder);
-					dest_elems.push(gmake("id3v2mux")?);
+					dest_elems.push_back(encoder);
+					dest_elems.push_back(gmake("id3v2mux")?);
+					true
 				}
 
 				Transcode::Copy => {
 					// already handled outside this fn
 					unreachable!();
 				}
+
+				Transcode::CopyAudio => {
+					let (extension, mux) = match audio_mime {
+						"audio/ogg" | "audio/opus" | "audio/x-opus" => {
+							let mux: Element = gmake("oggmux")?;
+
+							// let caps = Caps::new_simple("audio/x-opus", &[]);
+
+							let template = PadTemplate::new(
+								"audio_%u",
+								PadDirection::Sink,
+								PadPresence::Request,
+								// &Caps::builder_full_with_any_features().structure(Structure::new("opus", "")).build()
+								&src_pad.current_caps().unwrap(),
+							)?;
+
+							// println!("{:?}", caps);
+
+							mux.add_pad(&Pad::from_template(&template, Some("audio_%u")))?;
+
+							("opus", Some(mux))
+						}
+						"audio/mpeg" => ("mp3", None),
+						"audio/flac" => ("flac", Some(gmake("oggmux")?)),
+						_ => {
+							return Err(Error::msg(format!(
+								"Unsupprted audio mime type \"{}\"",
+								audio_mime
+							)))
+						}
+					};
+
+					let is_newer = is_file_newer(
+						&from_path_clone,
+						&from_path_clone.with_extension(extension),
+					)?;
+					if !is_newer {
+						return Ok(());
+					}
+
+					if let Some(mux) = mux {
+						dest_elems.push_back(mux);
+					}
+
+					new_extension_clone
+						.lock()
+						.expect("Could not lock extension mutex")
+						.replace(extension);
+
+					false
+				}
 			};
+
+			if is_transcoding {
+				let resample: Element = gmake("audioresample")?;
+				// quality from 0 to 10
+				resample.set_property("quality", &10)?;
+
+				let elems = [gmake("decodebin")?, gmake("audioconvert")?, resample];
+
+				// reversed order because we are pushing to the front
+				for elem in IntoIterator::into_iter(elems).into_iter().rev() {
+					dest_elems.push_front(elem);
+				}
+			}
 
 			let file_dest: gstreamer_base::BaseSink = gmake("filesink")?;
 			file_dest.set_property("location", &path_to_gstring(&to_path_clone))?;
 			file_dest.set_sync(false);
-			dest_elems.push(file_dest.upcast());
+			dest_elems.push_back(file_dest.upcast());
 
 			let dest_elem_refs: Vec<_> = dest_elems.iter().collect();
 			pipeline.add_many(&dest_elem_refs)?;
@@ -453,7 +512,8 @@ async fn transcode_gstreamer(
 				.get(0)
 				.unwrap()
 				.static_pad("sink")
-				.expect("1. dest element has no sinkpad");
+				.or_else(|| dest_elems.get(0).unwrap().static_pad("audio_0"))
+				.context("1. dest element has no sinkpad")?;
 			src_pad.link(&sink_pad)?;
 
 			Ok(())
@@ -593,7 +653,33 @@ async fn transcode_gstreamer(
 		.set_state(gstreamer::State::Null)
 		.context("Unable to set the pipeline to the `Null` state")?;
 
-	Ok(())
+	let mut new_extension = new_extension
+		.lock()
+		.expect("Could not lock extension mutex");
+	Ok(new_extension.take())
+}
+
+fn is_file_newer(from_path: &Path, to_path: &Path) -> Result<bool> {
+	let from_mtime = from_path
+		.metadata()
+		.map_err(Error::new)
+		.and_then(|md| md.modified().map_err(Error::new))
+		.with_context(|| {
+			format!(
+				"Unable to get mtime for \"from\" file {}",
+				from_path.display()
+			)
+		})?;
+	let to_mtime = to_path.metadata().and_then(|md| md.modified());
+	match to_mtime {
+		Ok(to_mtime) => Ok(to_mtime < from_mtime),
+		Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(true),
+		Err(err) => {
+			return Err(err).with_context(|| {
+				format!("Unable to get mtime for \"to\" file {}", to_path.display())
+			})
+		}
+	}
 }
 
 async fn rm_file_on_err<F, T>(path: &Path, f: F) -> Result<T>

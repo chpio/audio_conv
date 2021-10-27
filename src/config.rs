@@ -50,6 +50,9 @@ pub enum Transcode {
 
 	#[serde(rename = "copy")]
 	Copy,
+
+	#[serde(rename = "copyaudio")]
+	CopyAudio,
 }
 
 impl Transcode {
@@ -59,6 +62,7 @@ impl Transcode {
 			Transcode::Flac { .. } => "flac",
 			Transcode::Mp3 { .. } => "mp3",
 			Transcode::Copy => "",
+			Transcode::CopyAudio => "",
 		}
 	}
 }

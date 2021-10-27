@@ -13,10 +13,6 @@ matches:
       bitrate: 160
       bitrate_type: vbr # or cbr
 
-    # for copy (copies file without transcoding it):
-    # to:
-    #   codec: copy
-
     # for mp3:
     # to:
     #   codec: mp3
@@ -29,3 +25,12 @@ matches:
     #   codec: flac
     #   # effort spend for the compression. 0 (fastes compression) to 9 (highest compression)
     #   compression: 8
+
+    # copies the whole file without transcoding it or extracting audio from it. Using Copy on Write
+    # if supported by the filesystem.
+    # to:
+    #   codec: copy
+
+    # extracts the audio without transcoding it
+    # to:
+    #   codec: copyaudio
