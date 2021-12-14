@@ -1,4 +1,5 @@
 mod config;
+mod tag;
 mod ui;
 
 use crate::config::{Config, Transcode};
@@ -171,6 +172,9 @@ async fn main() -> Result<()> {
 async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
 	let (config, conv_args) = task::spawn_blocking(|| -> Result<_> {
 		gstreamer::init()?;
+		gstreamer::tags::register::<tag::MbArtistId>();
+		gstreamer::tags::register::<tag::MbAlbumArtistId>();
+
 		let config = config::config().context("Could not get the config")?;
 
 		let conv_args = get_conversion_args(&config)
