@@ -117,44 +117,44 @@ struct TranscodeMatchFile {
 }
 
 pub fn config() -> Result<Config> {
-	use clap::{App, Arg, SubCommand};
+	use clap::{Command, Arg};
 
-	let arg_matches = App::new("audio-conv")
+	let arg_matches = Command::new("audio-conv")
 		.version(clap::crate_version!())
 		.about("Converts audio files")
 		.arg(
-			Arg::with_name("config")
-				.short("c")
+			Arg::new("config")
+				.short('c')
 				.long("config")
 				.required(false)
 				.takes_value(true)
 				.help("Path to an audio-conv config file, defaults to \"audio-conv.yaml\""),
 		)
 		.arg(
-			Arg::with_name("from")
-				.short("f")
+			Arg::new("from")
+				.short('f')
 				.long("from")
 				.required(false)
 				.takes_value(true)
 				.help("\"from\" directory path"),
 		)
 		.arg(
-			Arg::with_name("to")
-				.short("t")
+			Arg::new("to")
+				.short('t')
 				.long("to")
 				.required(false)
 				.takes_value(true)
 				.help("\"to\" directory path"),
 		)
 		.arg(
-			Arg::with_name("jobs")
-				.short("j")
+			Arg::new("jobs")
+				.short('j')
 				.long("jobs")
 				.required(false)
 				.takes_value(true)
 				.help("Allow N jobs/transcodes at once. Defaults to number of logical cores"),
 		)
-		.subcommand(SubCommand::with_name("init").about("writes an example config"))
+		.subcommand(Command::new("init").about("writes an example config"))
 		.get_matches();
 
 	let current_dir = std::env::current_dir().context("Could not get current directory")?;

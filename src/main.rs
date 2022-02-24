@@ -5,7 +5,7 @@ mod ui;
 use crate::config::{Config, Transcode};
 use anyhow::{Context, Error, Result};
 use futures::{pin_mut, prelude::*};
-use glib::{GBoxed, GString};
+use glib::{Boxed, GString};
 use gstreamer::{element_error, prelude::*, Element};
 use gstreamer_base::prelude::*;
 use std::{
@@ -20,8 +20,8 @@ use std::{
 };
 use tokio::{fs, io::AsyncWriteExt, task, time::interval};
 
-#[derive(Clone, Debug, GBoxed)]
-#[gboxed(type_name = "GBoxErrorWrapper")]
+#[derive(Clone, Debug, Boxed)]
+#[boxed_type(name = "GBoxErrorWrapper")]
 struct GBoxErrorWrapper(Arc<Error>);
 
 impl GBoxErrorWrapper {
@@ -329,7 +329,7 @@ async fn transcode_gstreamer(
 	queue: &ui::MsgQueue,
 ) -> Result<()> {
 	let file_src: Element = gmake("filesrc")?;
-	file_src.set_property("location", &path_to_gstring(&from_path))?;
+	file_src.try_set_property("location", &path_to_gstring(&from_path))?;
 
 	let decodebin: Element = gmake("decodebin")?;
 
@@ -376,7 +376,7 @@ async fn transcode_gstreamer(
 
 			let resample: Element = gmake("audioresample")?;
 			// quality from 0 to 10
-			resample.set_property("quality", &10)?;
+			resample.try_set_property("quality", &10i32)?;
 
 			let mut dest_elems = vec![
 				resample,
@@ -390,7 +390,7 @@ async fn transcode_gstreamer(
 					bitrate_type,
 				} => {
 					let encoder: Element = gmake("opusenc")?;
-					encoder.set_property(
+					encoder.try_set_property(
 						"bitrate",
 						&i32::from(*bitrate)
 							.checked_mul(1_000)
@@ -421,8 +421,8 @@ async fn transcode_gstreamer(
 					let encoder: Element = gmake("lamemp3enc")?;
 					// target: "1" = "bitrate"
 					encoder.set_property_from_str("target", "1");
-					encoder.set_property("bitrate", &i32::from(*bitrate))?;
-					encoder.set_property(
+					encoder.try_set_property("bitrate", &i32::from(*bitrate))?;
+					encoder.try_set_property(
 						"cbr",
 						match bitrate_type {
 							config::BitrateType::Vbr => &false,
@@ -441,7 +441,7 @@ async fn transcode_gstreamer(
 			};
 
 			let file_dest: gstreamer_base::BaseSink = gmake("filesink")?;
-			file_dest.set_property("location", &path_to_gstring(&to_path_clone))?;
+			file_dest.try_set_property("location", &path_to_gstring(&to_path_clone))?;
 			file_dest.set_sync(false);
 			dest_elems.push(file_dest.upcast());
 
