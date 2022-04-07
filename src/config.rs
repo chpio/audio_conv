@@ -117,7 +117,7 @@ struct TranscodeMatchFile {
 }
 
 pub fn config() -> Result<Config> {
-	use clap::{Command, Arg};
+	use clap::{Arg, Command};
 
 	let arg_matches = Command::new("audio-conv")
 		.version(clap::crate_version!())
