@@ -126,6 +126,7 @@ pub fn config() -> Result<Config> {
 			Arg::new("config")
 				.short('c')
 				.long("config")
+				.allow_invalid_utf8(true)
 				.required(false)
 				.takes_value(true)
 				.help("Path to an audio-conv config file, defaults to \"audio-conv.yaml\""),
@@ -134,6 +135,7 @@ pub fn config() -> Result<Config> {
 			Arg::new("from")
 				.short('f')
 				.long("from")
+				.allow_invalid_utf8(true)
 				.required(false)
 				.takes_value(true)
 				.help("\"from\" directory path"),
@@ -142,6 +144,7 @@ pub fn config() -> Result<Config> {
 			Arg::new("to")
 				.short('t')
 				.long("to")
+				.allow_invalid_utf8(true)
 				.required(false)
 				.takes_value(true)
 				.help("\"to\" directory path"),
