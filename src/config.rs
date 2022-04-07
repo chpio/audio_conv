@@ -288,15 +288,8 @@ pub fn config() -> Result<Config> {
 			.context("Could not canonicalize \"to\" path")?,
 		matches: transcode_matches,
 		jobs: arg_matches
-			.value_of_os("jobs")
-			.map(|jobs_os_str| {
-				let jobs_str = jobs_os_str.to_str().with_context(|| {
-					// TODO: use `OsStr.display` when it lands
-					// https://github.com/rust-lang/rust/pull/80841
-					format!(
-						"Could not convert \"jobs\" argument to string due to invalid characters",
-					)
-				})?;
+			.value_of("jobs")
+			.map(|jobs_str| {
 				jobs_str.parse().with_context(|| {
 					format!(
 						"Could not parse \"jobs\" argument \"{}\" to a number",
