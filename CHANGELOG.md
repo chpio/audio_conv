@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.3.0
+
+* allow multiple values for the tags "musicbrainz-artistid" and "musicbrainz-albumartistid"
+* fix "from", "to" & "config" cli argument processing
+
 ## v1.2.2
 
 * dependencies upgraded
