@@ -92,7 +92,7 @@ impl State {
 				self.ended_tasks += 1;
 			}
 			Msg::TaskProgress { id, ratio } => {
-				let mut task = self
+				let task = self
 					.running_tasks
 					.get_mut(&id)
 					.context("Unable to update task progress; could't find task")?;

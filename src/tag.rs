@@ -1,4 +1,4 @@
-use glib::Value;
+use glib::{gstr, GStr, Value};
 use gstreamer::{
 	tags::{merge_strings_with_comma, CustomTag},
 	Tag, TagFlag,
@@ -8,16 +8,13 @@ pub struct MbArtistId;
 
 impl<'a> Tag<'a> for MbArtistId {
 	type TagType = &'a str;
-
-	fn tag_name<'b>() -> &'b str {
-		"musicbrainz-artistid"
-	}
+	const TAG_NAME: &'static GStr = gstr!("musicbrainz-artistid");
 }
 
 impl CustomTag<'_> for MbArtistId {
 	const FLAG: TagFlag = TagFlag::Meta;
-	const NICK: &'static str = "artist ID";
-	const DESCRIPTION: &'static str = "MusicBrainz artist ID";
+	const NICK: &'static GStr = gstr!("artist ID");
+	const DESCRIPTION: &'static GStr = gstr!("MusicBrainz artist ID");
 
 	fn merge_func(src: &Value) -> Value {
 		merge_strings_with_comma(src)
@@ -28,16 +25,13 @@ pub struct MbAlbumArtistId;
 
 impl<'a> Tag<'a> for MbAlbumArtistId {
 	type TagType = &'a str;
-
-	fn tag_name<'b>() -> &'b str {
-		"musicbrainz-albumartistid"
-	}
+	const TAG_NAME: &'static GStr = gstr!("musicbrainz-albumartistid");
 }
 
 impl CustomTag<'_> for MbAlbumArtistId {
 	const FLAG: TagFlag = TagFlag::Meta;
-	const NICK: &'static str = "album artist ID";
-	const DESCRIPTION: &'static str = "MusicBrainz album artist ID";
+	const NICK: &'static GStr = gstr!("album artist ID");
+	const DESCRIPTION: &'static GStr = gstr!("MusicBrainz album artist ID");
 
 	fn merge_func(src: &Value) -> Value {
 		merge_strings_with_comma(src)

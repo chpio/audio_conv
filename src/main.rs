@@ -5,13 +5,13 @@ mod ui;
 use crate::config::{Config, Transcode};
 use anyhow::{Context, Error, Result};
 use futures::{pin_mut, prelude::*};
-use glib::{Boxed, GString};
+use glib::Boxed;
 use gstreamer::{element_error, prelude::*, Element};
 use gstreamer_base::prelude::*;
 use std::{
 	borrow::Cow,
 	error::Error as StdError,
-	ffi, fmt,
+	fmt,
 	fmt::Write as FmtWrite,
 	path::{Path, PathBuf},
 	result::Result as StdResult,
@@ -51,8 +51,15 @@ struct GErrorMessage {
 	source: glib::Error,
 }
 
-fn gmake<T: IsA<Element>>(factory_name: &str) -> Result<T> {
-	let res = gstreamer::ElementFactory::make(factory_name, None)
+fn gmake<T: IsA<Element>>(factory_name: &str, properties: &[(&str, &dyn ToValue)]) -> Result<T> {
+	let builder = gstreamer::ElementFactory::make(factory_name);
+	let builder = properties
+		.into_iter()
+		.fold(builder, |builder, (name, value)| {
+			builder.property(name, value.to_value())
+		});
+	let res = builder
+		.build()
 		.with_context(|| format!("Could not make gstreamer Element \"{}\"", factory_name))?
 		.downcast()
 		.ok()
@@ -328,14 +335,13 @@ async fn transcode_gstreamer(
 	task_id: usize,
 	queue: &ui::MsgQueue,
 ) -> Result<()> {
-	let file_src: Element = gmake("filesrc")?;
-	file_src.try_set_property("location", &path_to_gstring(&from_path))?;
+	let file_src: Element = gmake("filesrc", &[("location", &from_path)])?;
 
-	let decodebin: Element = gmake("decodebin")?;
+	let decodebin: Element = gmake("decodebin", &[])?;
 
 	let src_elems: &[&Element] = &[&file_src, &decodebin];
 
-	let pipeline = gstreamer::Pipeline::new(None);
+	let pipeline = gstreamer::Pipeline::new();
 
 	pipeline.add_many(src_elems)?;
 	Element::link_many(src_elems)?;
@@ -374,14 +380,18 @@ async fn transcode_gstreamer(
 				Some(true) => {}
 			}
 
-			let resample: Element = gmake("audioresample")?;
-			// quality from 0 to 10
-			resample.try_set_property("quality", &10i32)?;
+			let resample: Element = gmake(
+				"audioresample",
+				&[
+					// quality from 0 to 10
+					("quality", &10i32),
+				],
+			)?;
 
 			let mut dest_elems = vec![
 				resample,
 				// `audioconvert` converts audio format, bitdepth, ...
-				gmake("audioconvert")?,
+				gmake("audioconvert", &[])?,
 			];
 
 			match &transcode {
@@ -389,28 +399,32 @@ async fn transcode_gstreamer(
 					bitrate,
 					bitrate_type,
 				} => {
-					let encoder: Element = gmake("opusenc")?;
-					encoder.try_set_property(
-						"bitrate",
-						&i32::from(*bitrate)
-							.checked_mul(1_000)
-							.context("Bitrate overflowed")?,
+					let encoder: Element = gmake(
+						"opusenc",
+						&[
+							(
+								"bitrate",
+								&i32::from(*bitrate)
+									.checked_mul(1_000)
+									.context("Bitrate overflowed")?,
+							),
+							(
+								"bitrate-type",
+								match bitrate_type {
+									config::BitrateType::Vbr => &"1",
+									config::BitrateType::Cbr => &"0",
+								},
+							),
+						],
 					)?;
-					encoder.set_property_from_str(
-						"bitrate-type",
-						match bitrate_type {
-							config::BitrateType::Vbr => "1",
-							config::BitrateType::Cbr => "0",
-						},
-					);
 
 					dest_elems.push(encoder);
-					dest_elems.push(gmake("oggmux")?);
+					dest_elems.push(gmake("oggmux", &[])?);
 				}
 
 				Transcode::Flac { compression } => {
-					let encoder: Element = gmake("flacenc")?;
-					encoder.set_property_from_str("quality", &compression.to_string());
+					let encoder: Element =
+						gmake("flacenc", &[("quality", &compression.to_string())])?;
 					dest_elems.push(encoder);
 				}
 
@@ -418,20 +432,24 @@ async fn transcode_gstreamer(
 					bitrate,
 					bitrate_type,
 				} => {
-					let encoder: Element = gmake("lamemp3enc")?;
-					// target: "1" = "bitrate"
-					encoder.set_property_from_str("target", "1");
-					encoder.try_set_property("bitrate", &i32::from(*bitrate))?;
-					encoder.try_set_property(
-						"cbr",
-						match bitrate_type {
-							config::BitrateType::Vbr => &false,
-							config::BitrateType::Cbr => &true,
-						},
+					let encoder: Element = gmake(
+						"lamemp3enc",
+						&[
+							// target: "1" = "bitrate"
+							("target", &"1"),
+							("bitrate", &i32::from(*bitrate)),
+							(
+								"cbr",
+								match bitrate_type {
+									config::BitrateType::Vbr => &false,
+									config::BitrateType::Cbr => &true,
+								},
+							),
+						],
 					)?;
 
 					dest_elems.push(encoder);
-					dest_elems.push(gmake("id3v2mux")?);
+					dest_elems.push(gmake("id3v2mux", &[])?);
 				}
 
 				Transcode::Copy => {
@@ -440,8 +458,8 @@ async fn transcode_gstreamer(
 				}
 			};
 
-			let file_dest: gstreamer_base::BaseSink = gmake("filesink")?;
-			file_dest.try_set_property("location", &path_to_gstring(&to_path_clone))?;
+			let file_dest: gstreamer_base::BaseSink =
+				gmake("filesink", &[("location", &to_path_clone)])?;
 			file_dest.set_sync(false);
 			dest_elems.push(file_dest.upcast());
 
@@ -521,7 +539,7 @@ async fn transcode_gstreamer(
 										.map(|s| String::from(s.path_string()))
 										.unwrap_or_else(|| String::from("None")),
 									error: err.error().to_string(),
-									debug: err.debug(),
+									debug: err.debug().map(|gstring| gstring.into()),
 									source: err.error(),
 								}
 								.into()
@@ -640,11 +658,4 @@ fn path_to_bytes(path: &Path) -> Cow<'_, [u8]> {
 			.collect();
 		Cow::Owned(buf)
 	}
-}
-
-fn path_to_gstring(path: &Path) -> GString {
-	let buf = path_to_bytes(path);
-	ffi::CString::new(buf)
-		.expect("Path contained null byte")
-		.into()
 }

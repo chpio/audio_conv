@@ -1,4 +1,5 @@
 use anyhow::{Context, Error, Result};
+use clap::{builder::ValueParser, ArgAction};
 use globset::GlobBuilder;
 use regex::bytes::{Regex, RegexBuilder};
 use serde::Deserialize;
@@ -103,6 +104,8 @@ struct ConfigFile {
 
 	#[serde(default)]
 	matches: Vec<TranscodeMatchFile>,
+
+	jobs: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -126,27 +129,27 @@ pub fn config() -> Result<Config> {
 			Arg::new("config")
 				.short('c')
 				.long("config")
-				.allow_invalid_utf8(true)
 				.required(false)
-				.takes_value(true)
+				.value_parser(ValueParser::path_buf())
+				.action(ArgAction::Set)
 				.help("Path to an audio-conv config file, defaults to \"audio-conv.yaml\""),
 		)
 		.arg(
 			Arg::new("from")
 				.short('f')
 				.long("from")
-				.allow_invalid_utf8(true)
 				.required(false)
-				.takes_value(true)
+				.value_parser(ValueParser::path_buf())
+				.action(ArgAction::Set)
 				.help("\"from\" directory path"),
 		)
 		.arg(
 			Arg::new("to")
 				.short('t')
 				.long("to")
-				.allow_invalid_utf8(true)
 				.required(false)
-				.takes_value(true)
+				.value_parser(ValueParser::path_buf())
+				.action(ArgAction::Set)
 				.help("\"to\" directory path"),
 		)
 		.arg(
@@ -154,7 +157,8 @@ pub fn config() -> Result<Config> {
 				.short('j')
 				.long("jobs")
 				.required(false)
-				.takes_value(true)
+				.value_parser(clap::value_parser!(usize))
+				.action(ArgAction::Set)
 				.help("Allow N jobs/transcodes at once. Defaults to number of logical cores"),
 		)
 		.subcommand(Command::new("init").about("writes an example config"))
@@ -162,8 +166,8 @@ pub fn config() -> Result<Config> {
 
 	let current_dir = std::env::current_dir().context("Could not get current directory")?;
 
-	let config_path = arg_matches.value_of_os("config");
-	let force_load = config_path.is_some();
+	let config_path = arg_matches.get_one::<PathBuf>("config");
+	let enforce_config_load = config_path.is_some();
 	let config_path = config_path
 		.map(AsRef::<Path>::as_ref)
 		.unwrap_or_else(|| AsRef::<Path>::as_ref("audio-conv.yaml"));
@@ -187,7 +191,7 @@ pub fn config() -> Result<Config> {
 	let config_file = load_config_file(&config_path)
 		.with_context(|| format!("Failed loading config file {}", config_path.display()))?;
 
-	if force_load && config_file.is_none() {
+	if enforce_config_load && config_file.is_none() {
 		return Err(Error::msg(format!(
 			"could not find config file \"{}\"",
 			config_path.display()
@@ -263,7 +267,7 @@ pub fn config() -> Result<Config> {
 	Ok(Config {
 		from: {
 			arg_matches
-				.value_of_os("from")
+				.get_one::<PathBuf>("from")
 				.map(|p| current_dir.join(p))
 				.or_else(|| {
 					config_file
@@ -277,7 +281,7 @@ pub fn config() -> Result<Config> {
 				.context("Could not canonicalize \"from\" path")?
 		},
 		to: arg_matches
-			.value_of_os("to")
+			.get_one::<PathBuf>("to")
 			.map(|p| current_dir.join(p))
 			.or_else(|| {
 				config_file
@@ -291,16 +295,18 @@ pub fn config() -> Result<Config> {
 			.context("Could not canonicalize \"to\" path")?,
 		matches: transcode_matches,
 		jobs: arg_matches
-			.value_of("jobs")
-			.map(|jobs_str| {
-				jobs_str.parse().with_context(|| {
-					format!(
-						"Could not parse \"jobs\" argument \"{}\" to a number",
-						&jobs_str
-					)
-				})
-			})
-			.transpose()?,
+			.get_one("jobs")
+			.copied()
+			.or_else(|| config_file.as_ref().map(|c| c.jobs).flatten()),
+		// .map(|jobs_str| {
+		// 	jobs_str.parse().with_context(|| {
+		// 		format!(
+		// 			"Could not parse \"jobs\" argument \"{}\" to a number",
+		// 			&jobs_str
+		// 		)
+		// 	})
+		// })
+		// .transpose()?,
 	})
 }
 
