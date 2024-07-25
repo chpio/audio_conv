@@ -5,7 +5,7 @@ second path. The directory structure from the first path gets also copied to the
 
 ## Dependencies
 
-Requires *gstreamer* version 1.10 or higher with the *base* plugin.
+Requires *gstreamer* version 1.16 or higher with the *base* plugin.
 
 The supported source audio formats (or even other media that is able to contain audio) depend on
 the installed *gstreamer* plugins.
