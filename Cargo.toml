@@ -1,7 +1,7 @@
 [package]
 name = "audio-conv"
 version = "1.3.0"
-edition = "2018"
+edition = "2021"
 description = "Copies directory structure and converts audio files in it"
 authors = ["Thomas Heck <t@b128.net>"]
 repository = "https://gitlab.com/chpio/audio-conv"
