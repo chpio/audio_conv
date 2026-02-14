@@ -43,7 +43,7 @@ impl fmt::Display for GBoxErrorWrapper {
 }
 
 #[derive(Debug, derive_more::Display, derive_more::Error)]
-#[display(fmt = "Received error from {}: {} (debug: {:?})", src, error, debug)]
+#[display("Received error from {}: {} (debug: {:?})", src, error, debug)]
 struct GErrorMessage {
 	src: String,
 	error: String,

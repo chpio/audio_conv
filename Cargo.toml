@@ -21,10 +21,10 @@ include = [
 ]
 
 [dependencies]
-gstreamer = { version = "0.23", features = ["v1_16"] }
-gstreamer-base = { version = "0.23", features = ["v1_16"] }
-gstreamer-audio = { version = "0.23", features = ["v1_16"] }
-glib = "0.20"
+gstreamer = { version = "0.24", features = ["v1_16"] }
+gstreamer-base = { version = "0.24", features = ["v1_16"] }
+gstreamer-audio = { version = "0.24", features = ["v1_16"] }
+glib = "0.21"
 futures = "0.3"
 num_cpus = "1"
 walkdir = "2"
@@ -35,7 +35,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 regex = "1"
 globset = "0.4"
-derive_more = "0.99"
+derive_more = { version = "2", features = ["full"] }
 tui = { version = "0.19", default-features = false, features = ["crossterm"] }
 
 [dependencies.tokio]
