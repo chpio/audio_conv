@@ -1,5 +1,5 @@
 use anyhow::{Context, Error, Result};
-use clap::{builder::ValueParser, ArgAction};
+use clap::{ArgAction, builder::ValueParser};
 use globset::GlobBuilder;
 use regex::bytes::{Regex, RegexBuilder};
 use serde::Deserialize;

@@ -6,7 +6,7 @@ use std::{
 	time::Duration,
 };
 use tokio::{task, time::interval};
-use tui::{backend::CrosstermBackend, Terminal};
+use tui::{Terminal, backend::CrosstermBackend};
 
 pub const UPDATE_INTERVAL_MILLIS: u64 = 100;
 

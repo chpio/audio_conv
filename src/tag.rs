@@ -1,7 +1,7 @@
-use glib::{gstr, GStr, Value};
+use glib::{GStr, Value, gstr};
 use gstreamer::{
-	tags::{merge_strings_with_comma, CustomTag},
 	Tag, TagFlag,
+	tags::{CustomTag, merge_strings_with_comma},
 };
 
 pub struct MbArtistId;

@@ -6,7 +6,7 @@ use crate::config::{Config, Transcode};
 use anyhow::{Context, Error, Result};
 use futures::{pin_mut, prelude::*};
 use glib::Boxed;
-use gstreamer::{element_error, prelude::*, Element};
+use gstreamer::{Element, element_error, prelude::*};
 use gstreamer_base::prelude::*;
 use std::{
 	borrow::Cow,
@@ -132,7 +132,7 @@ fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<Conversio
 					Err(err) => {
 						return Err(err).with_context(|| {
 							format!("Unable to get mtime for \"to\" file {}", to.display())
-						})
+						});
 					}
 				}
 			};
